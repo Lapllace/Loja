@@ -1,0 +1,380 @@
+// ==========================================================
+// GIL IMPORTS — SCHEMA PRISMA (PROPOSTA PARA REVISÃO)
+// ==========================================================
+//
+// Este arquivo é a proposta oficial do banco de dados.
+// NÃO implementar backend até aprovação definitiva deste schema.
+//
+// Versão: 2.1
+// ==========================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================================
+// ENUMS
+// ==========================================================
+
+enum UserRole {
+  ADMIN
+  EMPLOYEE
+}
+
+enum OrderOrigin {
+  LOCAL
+  ONLINE
+}
+
+enum OrderChannel {
+  LOJA_FISICA
+  SITE
+  WHATSAPP
+  INSTAGRAM
+}
+
+enum OrderStatus {
+  CRIADO
+  AGUARDANDO_PAGAMENTO
+  PAGO
+  SEPARANDO
+  PRONTO_PARA_ENTREGA
+  ENTREGUE
+  CANCELADO
+}
+
+enum StockMovementType {
+  ENTRADA
+  VENDA
+  TROCA
+  PERDA
+  DEVOLUCAO
+  AJUSTE
+}
+
+enum PaymentMethod {
+  PIX
+  CREDIT_CARD
+  BOLETO
+}
+
+enum PaymentStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+  REFUNDED
+  EXPIRED
+}
+
+// ==========================================================
+// USUÁRIOS
+// ==========================================================
+
+model User {
+  id           String    @id @default(uuid())
+  name         String
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  role         UserRole  @default(EMPLOYEE)
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLogin    DateTime? @map("last_login")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  refreshTokens  RefreshToken[]
+  ordersCreated  Order[]          @relation("OrderCreatedBy")
+  stockMovements StockMovement[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  tokenHash String   @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// ==========================================================
+// CLIENTES
+// ==========================================================
+
+model Customer {
+  id        String    @id @default(uuid())
+  name      String
+  phone     String
+  email     String?
+  cpf       String?
+  street    String?
+  city      String?
+  district  String?
+  zipCode   String?   @map("zip_code")
+  reference String?
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  orders Order[]
+
+  @@index([phone])
+  @@index([email])
+  @@map("customers")
+}
+
+// ==========================================================
+// CATEGORIAS E MARCAS
+// ==========================================================
+
+model Category {
+  id        String    @id @default(uuid())
+  name      String
+  slug      String    @unique
+  image     String?
+  sortOrder Int       @default(0) @map("sort_order")
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  products Product[]
+
+  @@map("categories")
+}
+
+model Brand {
+  id        String    @id @default(uuid())
+  name      String
+  slug      String    @unique
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  products Product[]
+
+  @@map("brands")
+}
+
+// ==========================================================
+// PRODUTOS
+// ==========================================================
+//
+// Estoque:
+//   stock          — quantidade física total
+//   reserved_stock — reservado por pedidos online pendentes
+//   available      — CALCULADO: stock - reserved_stock (não persistido)
+//
+// Regras (enforced no service layer):
+//   - reserved_stock >= 0
+//   - stock >= reserved_stock
+//   - Nunca vender acima de available
+//
+// Fluxo pagamento online:
+//   1. Pedido AGUARDANDO_PAGAMENTO → reserved_stock += qty
+//   2. Webhook confirmado          → stock -= qty, reserved_stock -= qty
+//   3. Pagamento expirado/cancelado → reserved_stock -= qty
+//
+// min_stock:
+//   - Sem default no banco
+//   - Ao cadastrar produto, service copia settings.default_min_stock
+//   - Cada produto pode ter min_stock próprio depois
+
+model Product {
+  id            String    @id @default(uuid())
+  sku           String    @unique
+  barcode       String?   @unique
+  slug          String    @unique
+  name          String
+  description   String?
+  price         Decimal   @db.Decimal(10, 2)
+  salePrice     Decimal?  @map("sale_price") @db.Decimal(10, 2)
+  costPrice     Decimal   @map("cost_price") @db.Decimal(10, 2)
+  stock         Int       @default(0)
+  reservedStock Int       @default(0) @map("reserved_stock")
+  minStock      Int       @map("min_stock")
+  categoryId    String    @map("category_id")
+  brandId       String    @map("brand_id")
+  isActive      Boolean   @default(true) @map("is_active")
+  isFeatured    Boolean   @default(false) @map("is_featured")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+
+  category       Category        @relation(fields: [categoryId], references: [id])
+  brand          Brand           @relation(fields: [brandId], references: [id])
+  images         ProductImage[]
+  orderItems     OrderItem[]
+  stockMovements StockMovement[]
+
+  @@index([categoryId])
+  @@index([brandId])
+  @@index([isActive])
+  @@index([isFeatured])
+  @@map("products")
+}
+
+model ProductImage {
+  id           String   @id @default(uuid())
+  productId    String   @map("product_id")
+  path         String
+  displayOrder Int      @default(0) @map("display_order")
+  isCover      Boolean  @default(false) @map("is_cover")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("product_images")
+}
+
+// ==========================================================
+// ESTOQUE
+// ==========================================================
+
+model StockMovement {
+  id        String            @id @default(uuid())
+  type      StockMovementType
+  productId String            @map("product_id")
+  quantity  Int
+  reason    String?
+  userId    String            @map("user_id")
+  orderId   String?           @map("order_id")
+  createdAt DateTime          @default(now()) @map("created_at")
+
+  product Product @relation(fields: [productId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+  order   Order?  @relation(fields: [orderId], references: [id])
+
+  @@index([productId])
+  @@index([orderId])
+  @@index([createdAt])
+  @@map("stock_movements")
+}
+
+// ==========================================================
+// PEDIDOS
+// ==========================================================
+//
+// notes — observações operacionais visíveis para ADMIN e EMPLOYEE
+// Ex: "Cliente busca na loja", "Entregar após 18h",
+//     "Confirmar pelo WhatsApp", "Motoboy já chamado"
+
+model Order {
+  id          String       @id @default(uuid())
+  orderNumber Int          @unique @default(autoincrement()) @map("order_number")
+  customerId  String?      @map("customer_id")
+  createdById String       @map("created_by_id")
+  origin      OrderOrigin
+  channel     OrderChannel
+  status      OrderStatus  @default(CRIADO)
+  subtotal    Decimal      @db.Decimal(10, 2)
+  discount    Decimal      @default(0) @db.Decimal(10, 2)
+  total       Decimal      @db.Decimal(10, 2)
+  notes       String?
+
+  // Snapshot de entrega (copiado do cliente no momento do pedido)
+  deliveryStreet    String? @map("delivery_street")
+  deliveryCity      String? @map("delivery_city")
+  deliveryDistrict  String? @map("delivery_district")
+  deliveryZipCode   String? @map("delivery_zip_code")
+  deliveryReference String? @map("delivery_reference")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  customer       Customer?       @relation(fields: [customerId], references: [id])
+  createdBy      User            @relation("OrderCreatedBy", fields: [createdById], references: [id])
+  items          OrderItem[]
+  payments       Payment[]
+  stockMovements StockMovement[]
+
+  @@index([status])
+  @@index([origin])
+  @@index([channel])
+  @@index([customerId])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id            String  @id @default(uuid())
+  orderId       String  @map("order_id")
+  productId     String  @map("product_id")
+  productName   String  @map("product_name")
+  sku           String
+  quantity      Int
+  unitPrice     Decimal @map("unit_price") @db.Decimal(10, 2)
+  unitCostPrice Decimal @map("unit_cost_price") @db.Decimal(10, 2)
+  total         Decimal @db.Decimal(10, 2)
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+  @@map("order_items")
+}
+
+// ==========================================================
+// PAGAMENTOS (ASAAS)
+// ==========================================================
+
+model Payment {
+  id              String        @id @default(uuid())
+  orderId         String        @map("order_id")
+  asaasPaymentId  String?       @unique @map("asaas_payment_id")
+  asaasCustomerId String?       @map("asaas_customer_id")
+  method          PaymentMethod
+  status          PaymentStatus @default(PENDING)
+  amount          Decimal       @db.Decimal(10, 2)
+  paidAt          DateTime?     @map("paid_at")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@index([orderId])
+  @@index([status])
+  @@map("payments")
+}
+
+// ==========================================================
+// CONFIGURAÇÕES
+// ==========================================================
+//
+// Armazenamento key/value.
+//
+// Chaves obrigatórias (seed inicial):
+//   store_name         — Nome da loja
+//   store_phone        — Telefone
+//   store_email        — Email
+//   instagram          — @ ou URL
+//   whatsapp           — Número com DDI
+//   address            — Endereço da loja física
+//   default_min_stock  — Estoque mínimo padrão para novos produtos
+//   currency           — Ex: BRL
+//   timezone           — Ex: America/Sao_Paulo
+//   maintenance_mode   — true/false (loja virtual)
+//
+// Chaves sensíveis (ex: asaas_api_key) ficam no .env, não no banco.
+
+model Setting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
+}
