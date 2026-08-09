@@ -1,32 +1,53 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Param,
+  Body,
+  UseGuards,
+} from '@nestjs/common';
 import { BrandsService } from './brands.service';
+import { CreateBrandDto } from './dto/create-brand.dto';
+import { UpdateBrandDto } from './dto/update-brand.dto';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { UserRole } from '@prisma/client';
 
 @Controller('brands')
 export class BrandsController {
   constructor(private readonly brandsService: BrandsService) {}
 
   @Post()
-  create(@Body() body: unknown) {
-    return this.brandsService.create();
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async create(@Body() body: CreateBrandDto) {
+    return this.brandsService.create(body);
   }
 
   @Get()
-  findAll() {
+  async findAll() {
     return this.brandsService.findAll();
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.brandsService.findOne();
+  async findOne(@Param('id') id: string) {
+    return this.brandsService.findOne(id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() body: unknown) {
-    return this.brandsService.update();
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async update(@Param('id') id: string, @Body() body: UpdateBrandDto) {
+    return this.brandsService.update(id, body);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.brandsService.remove();
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async remove(@Param('id') id: string) {
+    return this.brandsService.remove(id);
   }
 }

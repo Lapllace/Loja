@@ -1,1 +1,97 @@
-export class CreateProductDto {}
+import { Type } from 'class-transformer';
+import {
+  IsBoolean,
+  IsInt,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
+
+export class CreateProductDto {
+  @IsNotEmpty()
+  @IsString()
+  sku: string;
+
+  @IsNotEmpty()
+  @IsString()
+  name: string;
+
+  @IsNotEmpty()
+  @IsString()
+  slug: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsString()
+  shortDescription?: string;
+
+  @IsNotEmpty()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  price: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  comparePrice?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  costPrice?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  stock?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  active?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  featured?: boolean;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  weight?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  width?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  height?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  length?: number;
+
+  @IsNotEmpty()
+  @IsString()
+  categoryId: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  brandId?: string;
+}

@@ -7,7 +7,7 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
   app.enableCors();
-  app.useGlobalPipes(new ValidationPipe({ transform: true }));
+  app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
   app.enableShutdownHooks();
 
   const port = process.env.PORT ? Number(process.env.PORT) : 3000;

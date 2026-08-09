@@ -1,13 +1,19 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../database/prisma.service';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly config: ConfigService,
+    private readonly usersService: UsersService,
+  ) {}
 
-  create() {}
-  findAll() {}
-  findOne() {}
-  update() {}
-  remove() {}
+  async login(user: any) {
+    const payload = { sub: user.id, email: user.email, role: user.role };
+    const token = this.jwtService.sign(payload);
+    return { accessToken: token, user };
+  }
 }
