@@ -1,32 +1,60 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Param,
+  Body,
+  UseGuards,
+  BadRequestException,
+} from '@nestjs/common';
 import { UploadsService } from './uploads.service';
+import { CreateProductImageDto } from './dto/create-product-image.dto';
+import { UpdateProductImageDto } from './dto/update-product-image.dto';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { UserRole } from '@prisma/client';
 
-@Controller('uploads')
+@Controller('api/products/:productId/images')
 export class UploadsController {
   constructor(private readonly uploadsService: UploadsService) {}
 
   @Post()
-  create(@Body() body: unknown) {
-    return this.uploadsService.create();
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.OWNER)
+  async create(@Param('productId') productId: string, @Body() body: CreateProductImageDto) {
+    // disallowed fields
+    if (Object.prototype.hasOwnProperty.call(body as any, 'id') || Object.prototype.hasOwnProperty.call(body as any, 'productId') || Object.prototype.hasOwnProperty.call(body as any, 'createdAt')) {
+      throw new BadRequestException('id, productId and createdAt cannot be provided');
+    }
+    return this.uploadsService.create(productId, body as CreateProductImageDto);
   }
 
   @Get()
-  findAll() {
-    return this.uploadsService.findAll();
+  async findAll(@Param('productId') productId: string) {
+    return this.uploadsService.findAll(productId);
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.uploadsService.findOne();
+  @Patch(':imageId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.OWNER)
+  async update(
+    @Param('productId') productId: string,
+    @Param('imageId') imageId: string,
+    @Body() body: UpdateProductImageDto,
+  ) {
+    if (Object.prototype.hasOwnProperty.call(body as any, 'id') || Object.prototype.hasOwnProperty.call(body as any, 'productId') || Object.prototype.hasOwnProperty.call(body as any, 'createdAt')) {
+      throw new BadRequestException('id, productId and createdAt cannot be provided');
+    }
+    return this.uploadsService.update(productId, imageId, body as UpdateProductImageDto);
   }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() body: unknown) {
-    return this.uploadsService.update();
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.uploadsService.remove();
+  @Delete(':imageId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.OWNER)
+  async remove(@Param('productId') productId: string, @Param('imageId') imageId: string) {
+    return this.uploadsService.remove(productId, imageId);
   }
 }

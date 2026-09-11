@@ -214,6 +214,7 @@ model Order {
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
+  origin OrderOrigin @default(ONLINE)
   status OrderStatus @default(PENDING)
 
   subtotal Decimal @db.Decimal(10, 2)
@@ -310,6 +311,7 @@ model Payment {
   order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   method PaymentMethod
+  source PaymentSource @default(ONLINE)
 
   status PaymentStatus @default(PENDING)
 
@@ -455,6 +457,11 @@ enum ProductStatus {
   DISCONTINUED
 }
 
+enum OrderOrigin {
+  ONLINE
+  PHYSICAL
+}
+
 enum OrderStatus {
   PENDING
   PAID
@@ -463,6 +470,11 @@ enum OrderStatus {
   DELIVERED
   CANCELLED
   REFUNDED
+}
+
+enum PaymentSource {
+  ONLINE
+  PHYSICAL
 }
 
 enum PaymentMethod {

@@ -1,1 +1,1 @@
-export class UpdateOrderDto {}
+export { UpdateOrderStatusDto } from './update-order-status.dto';

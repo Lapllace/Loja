@@ -19,11 +19,12 @@ export class RolesGuard implements CanActivate {
       context.getClass(),
     ]);
     if (!required || required.length === 0) return true;
+
     const req = context.switchToHttp().getRequest();
     const user = req.user;
     if (!user) return false;
+
     const userRank = ROLE_HIERARCHY[user.role as UserRole] ?? 0;
-    const minRequired = Math.max(...required.map((r) => ROLE_HIERARCHY[r] ?? 0));
-    return userRank >= minRequired;
+    return required.some((role) => userRank >= (ROLE_HIERARCHY[role] ?? 0));
   }
 }
