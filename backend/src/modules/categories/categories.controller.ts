@@ -27,6 +27,11 @@ export class CategoriesController {
     return this.categoriesService.create(body);
   }
 
+  @Get('slug/:slug')
+  async findBySlug(@Param('slug') slug: string) {
+    return this.categoriesService.findBySlug(slug);
+  }
+
   @Get()
   async findAll() {
     return this.categoriesService.findAll();

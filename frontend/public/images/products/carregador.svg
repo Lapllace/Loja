@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0 0 800 800">
+  <rect width="800" height="800" fill="#F5F5F5"/>
+  <rect x="300" y="300" width="200" height="120" rx="20" fill="#0B0B0B"/>
+  <path d="M320 360 L440 360" stroke="#C9A227" stroke-width="10" stroke-linecap="round"/>
+  <path d="M500 330 L560 310 L560 410 L500 390 Z" fill="#303030"/>
+  <path d="M560 350 L610 350 L610 370 L560 370" fill="#A0A0A0"/>
+  <text x="400" y="680" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="600" fill="#303030" text-anchor="middle">Carregador USB-C</text>
+  <text x="400" y="725" font-family="Arial, Helvetica, sans-serif" font-size="24" fill="#A0A0A0" text-anchor="middle">Imagem ilustrativa</text>
+</svg>

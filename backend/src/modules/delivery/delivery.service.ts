@@ -423,7 +423,7 @@ export class DeliveryService {
 
     if (delivery.method === DeliveryMethod.UBER) {
       try {
-        const providerResult: DeliveryProviderResult = await this.uberDirectService.createDelivery({
+        const providerResult = await this.uberDirectService.createDelivery({
           deliveryId: delivery.id,
           orderId: delivery.orderId,
         });

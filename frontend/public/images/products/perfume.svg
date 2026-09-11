@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0 0 800 800">
+  <rect width="800" height="800" fill="#F5F5F5"/>
+  <rect x="310" y="230" width="180" height="340" rx="40" fill="#0B0B0B"/>
+  <rect x="340" y="260" width="120" height="150" rx="18" fill="#C9A227" opacity="0.9"/>
+  <rect x="330" y="450" width="140" height="70" rx="16" fill="#303030"/>
+  <circle cx="400" cy="485" r="18" fill="#F5F5F5"/>
+  <text x="400" y="680" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="600" fill="#303030" text-anchor="middle">Perfume Árabe</text>
+  <text x="400" y="725" font-family="Arial, Helvetica, sans-serif" font-size="24" fill="#A0A0A0" text-anchor="middle">Imagem ilustrativa</text>
+</svg>

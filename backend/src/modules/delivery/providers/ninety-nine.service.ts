@@ -24,6 +24,7 @@ export interface NinetyNineQuoteResult {
 
 export interface NinetyNineCreateDeliveryResult {
   externalDeliveryId: string;
+  quoteId: string | null;
   status: string;
   trackingCode?: string | null;
   trackingUrl?: string | null;
@@ -573,6 +574,7 @@ export class NinetyNineService {
 
       const result: NinetyNineCreateDeliveryResult = {
         externalDeliveryId: shipment.trackingId,
+        quoteId: shipment.internalKey || null,
         status: 'REQUESTING',
       };
 

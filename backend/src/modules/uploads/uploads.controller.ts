@@ -17,7 +17,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
 
-@Controller('api/products/:productId/images')
+@Controller('products/:productId/images')
 export class UploadsController {
   constructor(private readonly uploadsService: UploadsService) {}
 

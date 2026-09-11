@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../../database/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { QueryProductDto } from './dto/query-product.dto';
 
 @Injectable()
 export class ProductsService {
@@ -78,9 +79,44 @@ export class ProductsService {
     }
   }
 
-  async findAll() {
+  async findAll(query?: QueryProductDto) {
+    const where: Record<string, unknown> = {};
+
+    if (query?.categoryId) {
+      where.categoryId = query.categoryId;
+    }
+    if (query?.brandId) {
+      where.brandId = query.brandId;
+    }
+    if (query?.featured !== undefined) {
+      where.featured = query.featured;
+    }
+    if (query?.active !== undefined) {
+      where.active = query.active;
+    }
+    if (query?.inStock) {
+      where.stock = { gt: 0 };
+    }
+    if (query?.minPrice !== undefined || query?.maxPrice !== undefined) {
+      where.price = {
+        ...(query.minPrice !== undefined ? { gte: query.minPrice } : {}),
+        ...(query.maxPrice !== undefined ? { lte: query.maxPrice } : {}),
+      };
+    }
+    if (query?.search) {
+      where.OR = [
+        { name: { contains: query.search, mode: 'insensitive' } },
+        { description: { contains: query.search, mode: 'insensitive' } },
+        { shortDescription: { contains: query.search, mode: 'insensitive' } },
+      ];
+    }
+
+    const orderByField = query?.sortBy ?? 'name';
+    const orderDirection = query?.order ?? 'asc';
+
     return this.prisma.product.findMany({
-      orderBy: { name: 'asc' },
+      where,
+      orderBy: { [orderByField]: orderDirection },
       select: {
         id: true,
         sku: true,
@@ -93,16 +129,89 @@ export class ProductsService {
         stock: true,
         active: true,
         featured: true,
-        weight: true,
-        width: true,
-        height: true,
-        length: true,
         categoryId: true,
         brandId: true,
         createdAt: true,
         updatedAt: true,
+        category: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
+        brand: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
+        images: {
+          orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
+          select: {
+            id: true,
+            url: true,
+            alt: true,
+            position: true,
+            productId: true,
+            createdAt: true,
+          },
+        },
       },
     });
+  }
+
+  async findBySlug(slug: string) {
+    const product = await this.prisma.product.findUnique({
+      where: { slug },
+      select: {
+        id: true,
+        sku: true,
+        name: true,
+        slug: true,
+        description: true,
+        shortDescription: true,
+        price: true,
+        comparePrice: true,
+        stock: true,
+        active: true,
+        featured: true,
+        categoryId: true,
+        brandId: true,
+        createdAt: true,
+        updatedAt: true,
+        category: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
+        brand: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
+        images: {
+          orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
+          select: {
+            id: true,
+            url: true,
+            alt: true,
+            position: true,
+            productId: true,
+            createdAt: true,
+          },
+        },
+      },
+    });
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+    return product;
   }
 
   async findOne(id: string) {
@@ -120,14 +229,35 @@ export class ProductsService {
         stock: true,
         active: true,
         featured: true,
-        weight: true,
-        width: true,
-        height: true,
-        length: true,
         categoryId: true,
         brandId: true,
         createdAt: true,
         updatedAt: true,
+        category: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
+        brand: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
+        images: {
+          orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
+          select: {
+            id: true,
+            url: true,
+            alt: true,
+            position: true,
+            productId: true,
+            createdAt: true,
+          },
+        },
       },
     });
     if (!product) {
