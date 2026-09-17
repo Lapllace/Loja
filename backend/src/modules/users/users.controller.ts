@@ -31,7 +31,11 @@ export class UsersController {
   @Roles(UserRole.ADMIN)
   async create(@Req() req: any, @Body() body: CreateUserAdminDto) {
     const authUser = req.user;
-    if (body.role && body.role !== UserRole.CUSTOMER && authUser.role !== UserRole.OWNER) {
+    if (
+      body.role &&
+      body.role !== UserRole.CUSTOMER &&
+      authUser.role !== UserRole.OWNER
+    ) {
       throw new ForbiddenException('Insufficient permissions to assign role');
     }
     const user = await this.usersService.create(body);
@@ -52,7 +56,8 @@ export class UsersController {
     const target = await this.usersService.findOne(id);
     // CUSTOMER can only access own resource
     if (authUser.role === UserRole.CUSTOMER) {
-      if (authUser.id !== id) throw new ForbiddenException('Cannot access other user');
+      if (authUser.id !== id)
+        throw new ForbiddenException('Cannot access other user');
       return target;
     }
     // ADMIN cannot access OWNER
@@ -64,17 +69,23 @@ export class UsersController {
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard)
-  async update(@Req() req: any, @Param('id') id: string, @Body() body: UpdateUserDto) {
+  async update(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() body: UpdateUserDto,
+  ) {
     const authUser = req.user;
     const target = await this.usersService.findOne(id);
     // Prevent CUSTOMER from updating others or role/status
     if (authUser.role === UserRole.CUSTOMER) {
-      if (authUser.id !== id) throw new ForbiddenException('Cannot modify other user');
+      if (authUser.id !== id)
+        throw new ForbiddenException('Cannot modify other user');
       return this.usersService.update(id, body);
     }
     // ADMIN restrictions
     if (authUser.role === UserRole.ADMIN) {
-      if (target.role === UserRole.OWNER) throw new ForbiddenException('Cannot modify owner');
+      if (target.role === UserRole.OWNER)
+        throw new ForbiddenException('Cannot modify owner');
       return this.usersService.update(id, body);
     }
     // OWNER can update any normal fields
@@ -100,7 +111,9 @@ export class UsersController {
         throw new ForbiddenException('Cannot modify owner role or status');
       }
       if (body.role !== undefined && body.role !== UserRole.CUSTOMER) {
-        throw new ForbiddenException('Only OWNER can assign ADMIN or OWNER roles');
+        throw new ForbiddenException(
+          'Only OWNER can assign ADMIN or OWNER roles',
+        );
       }
       return this.usersService.updateRoleStatus(id, body);
     }
@@ -119,11 +132,14 @@ export class UsersController {
     const authUser = req.user;
     const target = await this.usersService.findOne(id);
     // CUSTOMER cannot delete
-    if (authUser.role === UserRole.CUSTOMER) throw new ForbiddenException('Insufficient permissions');
+    if (authUser.role === UserRole.CUSTOMER)
+      throw new ForbiddenException('Insufficient permissions');
     // ADMIN can delete only CUSTOMER
     if (authUser.role === UserRole.ADMIN) {
-      if (target.role === UserRole.OWNER) throw new ForbiddenException('Cannot delete owner');
-      if (target.role === UserRole.ADMIN) throw new ForbiddenException('Cannot delete admin');
+      if (target.role === UserRole.OWNER)
+        throw new ForbiddenException('Cannot delete owner');
+      if (target.role === UserRole.ADMIN)
+        throw new ForbiddenException('Cannot delete admin');
       await this.usersService.remove(id);
       return;
     }

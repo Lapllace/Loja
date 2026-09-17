@@ -1,4 +1,8 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateProductImageDto } from './dto/create-product-image.dto';
 import { UpdateProductImageDto } from './dto/update-product-image.dto';
@@ -8,7 +12,9 @@ export class UploadsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(productId: string, data: CreateProductImageDto) {
-    const product = await this.prisma.product.findUnique({ where: { id: productId } });
+    const product = await this.prisma.product.findUnique({
+      where: { id: productId },
+    });
     if (!product) {
       throw new BadRequestException('Product not found');
     }
@@ -35,7 +41,9 @@ export class UploadsService {
   }
 
   async findAll(productId: string) {
-    const product = await this.prisma.product.findUnique({ where: { id: productId } });
+    const product = await this.prisma.product.findUnique({
+      where: { id: productId },
+    });
     if (!product) {
       throw new NotFoundException('Product not found');
     }
@@ -46,15 +54,23 @@ export class UploadsService {
   }
 
   async findOne(productId: string, imageId: string) {
-    const image = await this.prisma.productImage.findUnique({ where: { id: imageId } });
+    const image = await this.prisma.productImage.findUnique({
+      where: { id: imageId },
+    });
     if (!image || image.productId !== productId) {
       throw new NotFoundException('Image not found');
     }
     return image;
   }
 
-  async update(productId: string, imageId: string, data: UpdateProductImageDto) {
-    const image = await this.prisma.productImage.findUnique({ where: { id: imageId } });
+  async update(
+    productId: string,
+    imageId: string,
+    data: UpdateProductImageDto,
+  ) {
+    const image = await this.prisma.productImage.findUnique({
+      where: { id: imageId },
+    });
     if (!image || image.productId !== productId) {
       throw new NotFoundException('Image not found');
     }
@@ -64,12 +80,17 @@ export class UploadsService {
     if (data.alt !== undefined) updateData.alt = data.alt;
     if (data.position !== undefined) updateData.position = data.position;
 
-    const updated = await this.prisma.productImage.update({ where: { id: imageId }, data: updateData });
+    const updated = await this.prisma.productImage.update({
+      where: { id: imageId },
+      data: updateData,
+    });
     return updated;
   }
 
   async remove(productId: string, imageId: string) {
-    const image = await this.prisma.productImage.findUnique({ where: { id: imageId } });
+    const image = await this.prisma.productImage.findUnique({
+      where: { id: imageId },
+    });
     if (!image || image.productId !== productId) {
       throw new NotFoundException('Image not found');
     }

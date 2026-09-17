@@ -68,4 +68,3 @@ export class QueryProductDto {
   @IsEnum(SortOrder)
   order?: SortOrder;
 }
-

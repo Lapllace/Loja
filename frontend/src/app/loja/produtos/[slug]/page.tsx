@@ -172,7 +172,7 @@ export default async function ProductPage({ params }: PageProps) {
             )}
 
             {/* Ações (client) */}
-            <ProductActions stock={product.stock} />
+            <ProductActions productId={product.id} stock={product.stock} />
           </div>
         </div>
       </div>

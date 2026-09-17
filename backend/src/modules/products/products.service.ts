@@ -14,13 +14,17 @@ export class ProductsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(data: CreateProductDto) {
-    const category = await this.prisma.category.findUnique({ where: { id: data.categoryId } });
+    const category = await this.prisma.category.findUnique({
+      where: { id: data.categoryId },
+    });
     if (!category) {
       throw new BadRequestException('Category not found');
     }
 
     if (data.brandId) {
-      const brand = await this.prisma.brand.findUnique({ where: { id: data.brandId } });
+      const brand = await this.prisma.brand.findUnique({
+        where: { id: data.brandId },
+      });
       if (!brand) {
         throw new BadRequestException('Brand not found');
       }
@@ -268,7 +272,9 @@ export class ProductsService {
 
   async update(id: string, data: UpdateProductDto) {
     if (data.categoryId !== undefined) {
-      const category = await this.prisma.category.findUnique({ where: { id: data.categoryId } });
+      const category = await this.prisma.category.findUnique({
+        where: { id: data.categoryId },
+      });
       if (!category) {
         throw new BadRequestException('Category not found');
       }
@@ -276,7 +282,9 @@ export class ProductsService {
 
     if (data.brandId !== undefined) {
       if (data.brandId) {
-        const brand = await this.prisma.brand.findUnique({ where: { id: data.brandId } });
+        const brand = await this.prisma.brand.findUnique({
+          where: { id: data.brandId },
+        });
         if (!brand) {
           throw new BadRequestException('Brand not found');
         }
@@ -287,10 +295,13 @@ export class ProductsService {
     if (data.sku !== undefined) updateData.sku = data.sku;
     if (data.name !== undefined) updateData.name = data.name;
     if (data.slug !== undefined) updateData.slug = data.slug;
-    if (data.description !== undefined) updateData.description = data.description;
-    if (data.shortDescription !== undefined) updateData.shortDescription = data.shortDescription;
+    if (data.description !== undefined)
+      updateData.description = data.description;
+    if (data.shortDescription !== undefined)
+      updateData.shortDescription = data.shortDescription;
     if (data.price !== undefined) updateData.price = data.price;
-    if (data.comparePrice !== undefined) updateData.comparePrice = data.comparePrice;
+    if (data.comparePrice !== undefined)
+      updateData.comparePrice = data.comparePrice;
     if (data.costPrice !== undefined) updateData.costPrice = data.costPrice;
     if (data.stock !== undefined) updateData.stock = data.stock;
     if (data.active !== undefined) updateData.active = data.active;
@@ -346,29 +357,47 @@ export class ProductsService {
       throw new NotFoundException('Product not found');
     }
 
-    const orderItemsCount = await this.prisma.orderItem.count({ where: { productId: id } });
+    const orderItemsCount = await this.prisma.orderItem.count({
+      where: { productId: id },
+    });
     if (orderItemsCount > 0) {
-      throw new ConflictException('Cannot delete product with linked order items');
+      throw new ConflictException(
+        'Cannot delete product with linked order items',
+      );
     }
 
-    const cartItemsCount = await this.prisma.cartItem.count({ where: { productId: id } });
+    const cartItemsCount = await this.prisma.cartItem.count({
+      where: { productId: id },
+    });
     if (cartItemsCount > 0) {
-      throw new ConflictException('Cannot delete product with linked cart items');
+      throw new ConflictException(
+        'Cannot delete product with linked cart items',
+      );
     }
 
-    const reviewsCount = await this.prisma.review.count({ where: { productId: id } });
+    const reviewsCount = await this.prisma.review.count({
+      where: { productId: id },
+    });
     if (reviewsCount > 0) {
       throw new ConflictException('Cannot delete product with linked reviews');
     }
 
-    const wishlistCount = await this.prisma.wishlist.count({ where: { productId: id } });
+    const wishlistCount = await this.prisma.wishlist.count({
+      where: { productId: id },
+    });
     if (wishlistCount > 0) {
-      throw new ConflictException('Cannot delete product with linked wishlists');
+      throw new ConflictException(
+        'Cannot delete product with linked wishlists',
+      );
     }
 
-    const stockMovementsCount = await this.prisma.stockMovement.count({ where: { productId: id } });
+    const stockMovementsCount = await this.prisma.stockMovement.count({
+      where: { productId: id },
+    });
     if (stockMovementsCount > 0) {
-      throw new ConflictException('Cannot delete product with linked stock movements');
+      throw new ConflictException(
+        'Cannot delete product with linked stock movements',
+      );
     }
 
     await this.prisma.product.delete({ where: { id } });

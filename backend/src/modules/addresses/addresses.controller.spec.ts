@@ -64,7 +64,10 @@ describe('AddressesController', () => {
 
     const result = await controller.findOne(req as any, addressId);
 
-    expect(addressesServiceMock.findOne).toHaveBeenCalledWith(userId, addressId);
+    expect(addressesServiceMock.findOne).toHaveBeenCalledWith(
+      userId,
+      addressId,
+    );
     expect(result).toEqual(addressMock);
   });
 
@@ -79,18 +82,27 @@ describe('AddressesController', () => {
       district: 'Bela Vista',
       city: 'São Paulo',
       state: 'SP',
-    } as any);
+    });
 
-    expect(addressesServiceMock.create).toHaveBeenCalledWith(userId, expect.any(Object));
+    expect(addressesServiceMock.create).toHaveBeenCalledWith(
+      userId,
+      expect.any(Object),
+    );
     expect(result).toEqual(addressMock);
   });
 
   it('should update own address', async () => {
     addressesServiceMock.update.mockResolvedValue(addressMock);
 
-    const result = await controller.update(req as any, addressId, { city: 'Rio de Janeiro' } as any);
+    const result = await controller.update(req as any, addressId, {
+      city: 'Rio de Janeiro',
+    });
 
-    expect(addressesServiceMock.update).toHaveBeenCalledWith(userId, addressId, expect.any(Object));
+    expect(addressesServiceMock.update).toHaveBeenCalledWith(
+      userId,
+      addressId,
+      expect.any(Object),
+    );
     expect(result).toEqual(addressMock);
   });
 
@@ -108,7 +120,10 @@ describe('AddressesController', () => {
 
     const result = await controller.setDefault(req as any, addressId);
 
-    expect(addressesServiceMock.setDefault).toHaveBeenCalledWith(userId, addressId);
+    expect(addressesServiceMock.setDefault).toHaveBeenCalledWith(
+      userId,
+      addressId,
+    );
     expect(result).toEqual(addressMock);
   });
 });

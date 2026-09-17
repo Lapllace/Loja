@@ -78,5 +78,10 @@ body {
   .text-balance {
     text-wrap: balance;
   }
+
+  /* Contador do carrinho no cabeçalho */
+  .cart-count {
+    @apply inline-flex min-w-[1.25rem] h-5 px-1 items-center justify-center rounded-full text-[10px] font-bold leading-none;
+  }
 }
 

@@ -1,4 +1,8 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateBrandDto } from './dto/create-brand.dto';
 import { UpdateBrandDto } from './dto/update-brand.dto';
@@ -81,7 +85,8 @@ export class BrandsService {
     const updateData: any = {};
     if (data.name !== undefined) updateData.name = data.name;
     if (data.slug !== undefined) updateData.slug = data.slug;
-    if (data.description !== undefined) updateData.description = data.description;
+    if (data.description !== undefined)
+      updateData.description = data.description;
     if (data.logoUrl !== undefined) updateData.logoUrl = data.logoUrl;
     if (data.website !== undefined) updateData.website = data.website;
     if (data.active !== undefined) updateData.active = data.active;
@@ -120,7 +125,9 @@ export class BrandsService {
       throw new NotFoundException('Brand not found');
     }
 
-    const productCount = await this.prisma.product.count({ where: { brandId: id } });
+    const productCount = await this.prisma.product.count({
+      where: { brandId: id },
+    });
     if (productCount > 0) {
       throw new ConflictException('Cannot delete brand with linked products');
     }

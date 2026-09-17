@@ -1,5 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ServiceUnavailableException, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  ServiceUnavailableException,
+  BadRequestException,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NinetyNineService } from './ninety-nine.service';
 import { DeliveryStatus } from '@prisma/client';
@@ -30,11 +35,13 @@ describe('NinetyNineService', () => {
     it('should throw ServiceUnavailableException when credentials are not configured', async () => {
       mockConfigService.get.mockReturnValue(undefined);
 
-      await expect(service.quoteDelivery({ 
-        pickup: { address: {} }, 
-        dropoff: { address: {} },
-        items: []
-      })).rejects.toThrow(ServiceUnavailableException);
+      await expect(
+        service.quoteDelivery({
+          pickup: { address: {} },
+          dropoff: { address: {} },
+          items: [],
+        }),
+      ).rejects.toThrow(ServiceUnavailableException);
     });
 
     it('should obtain access token successfully', async () => {
@@ -54,7 +61,7 @@ describe('NinetyNineService', () => {
           expires_in: 3600,
           token_type: 'bearer',
         }),
-      }) as jest.Mock;
+      });
 
       const token = await service['getAccessToken']();
       expect(token).toBe('test-access-token');
@@ -87,7 +94,7 @@ describe('NinetyNineService', () => {
           expires_in: 3600,
           token_type: 'bearer',
         }),
-      }) as jest.Mock;
+      });
 
       const token1 = await service['getAccessToken']();
       const token2 = await service['getAccessToken']();
@@ -114,10 +121,10 @@ describe('NinetyNineService', () => {
           expires_in: 1,
           token_type: 'bearer',
         }),
-      }) as jest.Mock;
+      });
 
       await service['getAccessToken']();
-      
+
       // Manually expire token
       service['tokenCache'] = {
         token: 'test-access-token',
@@ -131,7 +138,7 @@ describe('NinetyNineService', () => {
           expires_in: 3600,
           token_type: 'bearer',
         }),
-      }) as jest.Mock;
+      });
 
       const newToken = await service['getAccessToken']();
       expect(newToken).toBe('new-access-token');
@@ -151,43 +158,62 @@ describe('NinetyNineService', () => {
     });
 
     it('should throw error when pickup address is missing', async () => {
-      await expect(service.quoteDelivery({ 
-        pickup: { address: null }, 
-        dropoff: { address: {} },
-        items: []
-      })).rejects.toThrow(BadRequestException);
+      await expect(
+        service.quoteDelivery({
+          pickup: { address: null },
+          dropoff: { address: {} },
+          items: [],
+        }),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should throw error when dropoff address is missing', async () => {
-      await expect(service.quoteDelivery({ 
-        pickup: { address: {} }, 
-        dropoff: { address: null },
-        items: []
-      })).rejects.toThrow(BadRequestException);
+      await expect(
+        service.quoteDelivery({
+          pickup: { address: {} },
+          dropoff: { address: null },
+          items: [],
+        }),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should throw error when coordinates are missing', async () => {
-      await expect(service.quoteDelivery({ 
-        pickup: { address: { lat: null, lng: null } }, 
-        dropoff: { address: { lat: null, lng: null } },
-        items: []
-      })).rejects.toThrow(BadRequestException);
+      await expect(
+        service.quoteDelivery({
+          pickup: { address: { lat: null, lng: null } },
+          dropoff: { address: { lat: null, lng: null } },
+          items: [],
+        }),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should throw error when items are missing', async () => {
-      await expect(service.quoteDelivery({ 
-        pickup: { address: { lat: -23.5505, lng: -46.6333 } }, 
-        dropoff: { address: { lat: -23.5510, lng: -46.6340 } },
-        items: []
-      })).rejects.toThrow(BadRequestException);
+      await expect(
+        service.quoteDelivery({
+          pickup: { address: { lat: -23.5505, lng: -46.6333 } },
+          dropoff: { address: { lat: -23.551, lng: -46.634 } },
+          items: [],
+        }),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should throw error when items lack dimensions', async () => {
-      await expect(service.quoteDelivery({ 
-        pickup: { address: { lat: -23.5505, lng: -46.6333 } }, 
-        dropoff: { address: { lat: -23.5510, lng: -46.6340 } },
-        items: [{ description: 'Test', weight: 0, length: 0, width: 0, height: 0, quantity: 1 }]
-      })).rejects.toThrow(BadRequestException);
+      await expect(
+        service.quoteDelivery({
+          pickup: { address: { lat: -23.5505, lng: -46.6333 } },
+          dropoff: { address: { lat: -23.551, lng: -46.634 } },
+          items: [
+            {
+              description: 'Test',
+              weight: 0,
+              length: 0,
+              width: 0,
+              height: 0,
+              quantity: 1,
+            },
+          ],
+        }),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should obtain quote successfully with real data', async () => {
@@ -198,21 +224,21 @@ describe('NinetyNineService', () => {
           expires_in: 3600,
           token_type: 'bearer',
         }),
-      }) as jest.Mock;
+      });
 
       global.fetch = jest.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
           data: {
-            totalCost: 25.50,
+            totalCost: 25.5,
             serviceLevels: ['SPT', 'SMD'],
           },
         }),
-      }) as jest.Mock;
+      });
 
       const result = await service.quoteDelivery({
-        pickup: { 
-          address: { 
+        pickup: {
+          address: {
             recipient: 'Loja Teste',
             phone: '+5511999999999',
             email: 'loja@teste.com',
@@ -225,11 +251,11 @@ describe('NinetyNineService', () => {
             state: 'SP',
             reference: null,
             lat: -23.5505,
-            lng: -46.6333
-          } 
+            lng: -46.6333,
+          },
         },
-        dropoff: { 
-          address: { 
+        dropoff: {
+          address: {
             recipient: 'Cliente Teste',
             phone: '+5511888888888',
             email: 'cliente@teste.com',
@@ -241,9 +267,9 @@ describe('NinetyNineService', () => {
             city: 'São Paulo',
             state: 'SP',
             reference: 'Próximo ao mercado',
-            lat: -23.5510,
-            lng: -46.6340
-          } 
+            lat: -23.551,
+            lng: -46.634,
+          },
         },
         items: [
           {
@@ -252,12 +278,12 @@ describe('NinetyNineService', () => {
             length: 20,
             width: 15,
             height: 10,
-            quantity: 2
-          }
-        ]
+            quantity: 2,
+          },
+        ],
       });
 
-      expect(result.shippingCost).toBe(25.50);
+      expect(result.shippingCost).toBe(25.5);
       expect(result.quoteId).toBeNull(); // API does not provide quote ID
       expect(result.expiresAt).toBeNull(); // API does not provide expiration
     });
@@ -270,59 +296,61 @@ describe('NinetyNineService', () => {
           expires_in: 3600,
           token_type: 'bearer',
         }),
-      }) as jest.Mock;
+      });
 
       global.fetch = jest.fn().mockResolvedValue({
         ok: true,
         json: async () => ({}), // Missing totalCost
-      }) as jest.Mock;
+      });
 
-      await expect(service.quoteDelivery({
-        pickup: { 
-          address: { 
-            recipient: 'Loja Teste',
-            phone: '+5511999999999',
-            email: 'loja@teste.com',
-            zipcode: '01310-100',
-            street: 'Rua Teste',
-            number: '123',
-            complement: 'Apto 1',
-            district: 'Centro',
-            city: 'São Paulo',
-            state: 'SP',
-            reference: null,
-            lat: -23.5505,
-            lng: -46.6333
-          } 
-        },
-        dropoff: { 
-          address: { 
-            recipient: 'Cliente Teste',
-            phone: '+5511888888888',
-            email: 'cliente@teste.com',
-            zipcode: '01310-200',
-            street: 'Av Teste',
-            number: '456',
-            complement: null,
-            district: 'Bela Vista',
-            city: 'São Paulo',
-            state: 'SP',
-            reference: 'Próximo ao mercado',
-            lat: -23.5510,
-            lng: -46.6340
-          } 
-        },
-        items: [
-          {
-            description: 'Produto Teste',
-            weight: 500,
-            length: 20,
-            width: 15,
-            height: 10,
-            quantity: 2
-          }
-        ]
-      })).rejects.toThrow(ServiceUnavailableException);
+      await expect(
+        service.quoteDelivery({
+          pickup: {
+            address: {
+              recipient: 'Loja Teste',
+              phone: '+5511999999999',
+              email: 'loja@teste.com',
+              zipcode: '01310-100',
+              street: 'Rua Teste',
+              number: '123',
+              complement: 'Apto 1',
+              district: 'Centro',
+              city: 'São Paulo',
+              state: 'SP',
+              reference: null,
+              lat: -23.5505,
+              lng: -46.6333,
+            },
+          },
+          dropoff: {
+            address: {
+              recipient: 'Cliente Teste',
+              phone: '+5511888888888',
+              email: 'cliente@teste.com',
+              zipcode: '01310-200',
+              street: 'Av Teste',
+              number: '456',
+              complement: null,
+              district: 'Bela Vista',
+              city: 'São Paulo',
+              state: 'SP',
+              reference: 'Próximo ao mercado',
+              lat: -23.551,
+              lng: -46.634,
+            },
+          },
+          items: [
+            {
+              description: 'Produto Teste',
+              weight: 500,
+              length: 20,
+              width: 15,
+              height: 10,
+              quantity: 2,
+            },
+          ],
+        }),
+      ).rejects.toThrow(ServiceUnavailableException);
     });
 
     it('should use production URL when environment is production', async () => {
@@ -342,21 +370,21 @@ describe('NinetyNineService', () => {
           expires_in: 3600,
           token_type: 'bearer',
         }),
-      }) as jest.Mock;
+      });
 
       global.fetch = jest.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
           data: {
-            totalCost: 30.00,
+            totalCost: 30.0,
             serviceLevels: ['SPT'],
           },
         }),
-      }) as jest.Mock;
+      });
 
       await service.quoteDelivery({
-        pickup: { 
-          address: { 
+        pickup: {
+          address: {
             recipient: 'Loja Teste',
             phone: '+5511999999999',
             email: 'loja@teste.com',
@@ -369,11 +397,11 @@ describe('NinetyNineService', () => {
             state: 'SP',
             reference: null,
             lat: -23.5505,
-            lng: -46.6333
-          } 
+            lng: -46.6333,
+          },
         },
-        dropoff: { 
-          address: { 
+        dropoff: {
+          address: {
             recipient: 'Cliente Teste',
             phone: '+5511888888888',
             email: 'cliente@teste.com',
@@ -385,9 +413,9 @@ describe('NinetyNineService', () => {
             city: 'São Paulo',
             state: 'SP',
             reference: 'Próximo ao mercado',
-            lat: -23.5510,
-            lng: -46.6340
-          } 
+            lat: -23.551,
+            lng: -46.634,
+          },
         },
         items: [
           {
@@ -396,9 +424,9 @@ describe('NinetyNineService', () => {
             length: 20,
             width: 15,
             height: 10,
-            quantity: 2
-          }
-        ]
+            quantity: 2,
+          },
+        ],
       });
 
       expect(global.fetch).toHaveBeenCalledWith(
@@ -428,7 +456,7 @@ describe('NinetyNineService', () => {
           expires_in: 3600,
           token_type: 'bearer',
         }),
-      }) as jest.Mock;
+      });
 
       global.fetch = jest.fn().mockResolvedValue({
         ok: true,
@@ -441,7 +469,7 @@ describe('NinetyNineService', () => {
             },
           ],
         }),
-      }) as jest.Mock;
+      });
 
       const result = await service.createDelivery({
         deliveryId: 'delivery-456',
@@ -458,7 +486,7 @@ describe('NinetyNineService', () => {
           state: 'SP',
           reference: null,
           lat: -23.5505,
-          lng: -46.6333
+          lng: -46.6333,
         },
         order: {
           shippingRecipient: 'João Silva',
@@ -472,8 +500,8 @@ describe('NinetyNineService', () => {
           shippingCity: 'São Paulo',
           shippingState: 'SP',
           shippingReference: 'Em frente ao parque',
-          shippingLat: -23.5510,
-          shippingLng: -46.6340
+          shippingLat: -23.551,
+          shippingLng: -46.634,
         },
         items: [
           {
@@ -482,9 +510,9 @@ describe('NinetyNineService', () => {
             length: 25,
             width: 18,
             height: 5,
-            quantity: 3
-          }
-        ]
+            quantity: 3,
+          },
+        ],
       });
 
       expect(result.externalDeliveryId).toBe('tracking-123');
@@ -493,279 +521,291 @@ describe('NinetyNineService', () => {
     });
 
     it('should throw error when store lacks coordinates', async () => {
-      await expect(service.createDelivery({
-        deliveryId: 'delivery-456',
-        storeSettings: {
-          name: 'Minha Loja',
-          phone: '+5511999999999',
-          email: 'contato@loja.com',
-          zipcode: '01310-100',
-          street: 'Rua da Loja',
-          number: '100',
-          complement: 'Loja 1',
-          district: 'Centro',
-          city: 'São Paulo',
-          state: 'SP',
-          reference: null,
-          lat: null,
-          lng: null
-        },
-        order: {
-          shippingRecipient: 'João Silva',
-          shippingPhone: '+5511888888888',
-          shippingEmail: 'joao@email.com',
-          shippingZipcode: '01310-200',
-          shippingStreet: 'Av Paulista',
-          shippingNumber: '500',
-          shippingComplement: 'Apto 10',
-          shippingDistrict: 'Bela Vista',
-          shippingCity: 'São Paulo',
-          shippingState: 'SP',
-          shippingReference: 'Em frente ao parque',
-          shippingLat: -23.5510,
-          shippingLng: -46.6340
-        },
-        items: [
-          {
-            description: 'Camiseta Básica',
-            weight: 200,
-            length: 25,
-            width: 18,
-            height: 5,
-            quantity: 3
-          }
-        ]
-      })).rejects.toThrow(BadRequestException);
+      await expect(
+        service.createDelivery({
+          deliveryId: 'delivery-456',
+          storeSettings: {
+            name: 'Minha Loja',
+            phone: '+5511999999999',
+            email: 'contato@loja.com',
+            zipcode: '01310-100',
+            street: 'Rua da Loja',
+            number: '100',
+            complement: 'Loja 1',
+            district: 'Centro',
+            city: 'São Paulo',
+            state: 'SP',
+            reference: null,
+            lat: null,
+            lng: null,
+          },
+          order: {
+            shippingRecipient: 'João Silva',
+            shippingPhone: '+5511888888888',
+            shippingEmail: 'joao@email.com',
+            shippingZipcode: '01310-200',
+            shippingStreet: 'Av Paulista',
+            shippingNumber: '500',
+            shippingComplement: 'Apto 10',
+            shippingDistrict: 'Bela Vista',
+            shippingCity: 'São Paulo',
+            shippingState: 'SP',
+            shippingReference: 'Em frente ao parque',
+            shippingLat: -23.551,
+            shippingLng: -46.634,
+          },
+          items: [
+            {
+              description: 'Camiseta Básica',
+              weight: 200,
+              length: 25,
+              width: 18,
+              height: 5,
+              quantity: 3,
+            },
+          ],
+        }),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should throw error when order lacks coordinates', async () => {
-      await expect(service.createDelivery({
-        deliveryId: 'delivery-456',
-        storeSettings: {
-          name: 'Minha Loja',
-          phone: '+5511999999999',
-          email: 'contato@loja.com',
-          zipcode: '01310-100',
-          street: 'Rua da Loja',
-          number: '100',
-          complement: 'Loja 1',
-          district: 'Centro',
-          city: 'São Paulo',
-          state: 'SP',
-          reference: null,
-          lat: -23.5505,
-          lng: -46.6333
-        },
-        order: {
-          shippingRecipient: 'João Silva',
-          shippingPhone: '+5511888888888',
-          shippingEmail: 'joao@email.com',
-          shippingZipcode: '01310-200',
-          shippingStreet: 'Av Paulista',
-          shippingNumber: '500',
-          shippingComplement: 'Apto 10',
-          shippingDistrict: 'Bela Vista',
-          shippingCity: 'São Paulo',
-          shippingState: 'SP',
-          shippingReference: 'Em frente ao parque',
-          shippingLat: null,
-          shippingLng: null
-        },
-        items: [
-          {
-            description: 'Camiseta Básica',
-            weight: 200,
-            length: 25,
-            width: 18,
-            height: 5,
-            quantity: 3
-          }
-        ]
-      })).rejects.toThrow(BadRequestException);
+      await expect(
+        service.createDelivery({
+          deliveryId: 'delivery-456',
+          storeSettings: {
+            name: 'Minha Loja',
+            phone: '+5511999999999',
+            email: 'contato@loja.com',
+            zipcode: '01310-100',
+            street: 'Rua da Loja',
+            number: '100',
+            complement: 'Loja 1',
+            district: 'Centro',
+            city: 'São Paulo',
+            state: 'SP',
+            reference: null,
+            lat: -23.5505,
+            lng: -46.6333,
+          },
+          order: {
+            shippingRecipient: 'João Silva',
+            shippingPhone: '+5511888888888',
+            shippingEmail: 'joao@email.com',
+            shippingZipcode: '01310-200',
+            shippingStreet: 'Av Paulista',
+            shippingNumber: '500',
+            shippingComplement: 'Apto 10',
+            shippingDistrict: 'Bela Vista',
+            shippingCity: 'São Paulo',
+            shippingState: 'SP',
+            shippingReference: 'Em frente ao parque',
+            shippingLat: null,
+            shippingLng: null,
+          },
+          items: [
+            {
+              description: 'Camiseta Básica',
+              weight: 200,
+              length: 25,
+              width: 18,
+              height: 5,
+              quantity: 3,
+            },
+          ],
+        }),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should throw error when store lacks phone', async () => {
-      await expect(service.createDelivery({
-        deliveryId: 'delivery-456',
-        storeSettings: {
-          name: 'Minha Loja',
-          phone: null,
-          email: 'contato@loja.com',
-          zipcode: '01310-100',
-          street: 'Rua da Loja',
-          number: '100',
-          complement: 'Loja 1',
-          district: 'Centro',
-          city: 'São Paulo',
-          state: 'SP',
-          reference: null,
-          lat: -23.5505,
-          lng: -46.6333
-        },
-        order: {
-          shippingRecipient: 'João Silva',
-          shippingPhone: '+5511888888888',
-          shippingEmail: 'joao@email.com',
-          shippingZipcode: '01310-200',
-          shippingStreet: 'Av Paulista',
-          shippingNumber: '500',
-          shippingComplement: 'Apto 10',
-          shippingDistrict: 'Bela Vista',
-          shippingCity: 'São Paulo',
-          shippingState: 'SP',
-          shippingReference: 'Em frente ao parque',
-          shippingLat: -23.5510,
-          shippingLng: -46.6340
-        },
-        items: [
-          {
-            description: 'Camiseta Básica',
-            weight: 200,
-            length: 25,
-            width: 18,
-            height: 5,
-            quantity: 3
-          }
-        ]
-      })).rejects.toThrow(BadRequestException);
+      await expect(
+        service.createDelivery({
+          deliveryId: 'delivery-456',
+          storeSettings: {
+            name: 'Minha Loja',
+            phone: null,
+            email: 'contato@loja.com',
+            zipcode: '01310-100',
+            street: 'Rua da Loja',
+            number: '100',
+            complement: 'Loja 1',
+            district: 'Centro',
+            city: 'São Paulo',
+            state: 'SP',
+            reference: null,
+            lat: -23.5505,
+            lng: -46.6333,
+          },
+          order: {
+            shippingRecipient: 'João Silva',
+            shippingPhone: '+5511888888888',
+            shippingEmail: 'joao@email.com',
+            shippingZipcode: '01310-200',
+            shippingStreet: 'Av Paulista',
+            shippingNumber: '500',
+            shippingComplement: 'Apto 10',
+            shippingDistrict: 'Bela Vista',
+            shippingCity: 'São Paulo',
+            shippingState: 'SP',
+            shippingReference: 'Em frente ao parque',
+            shippingLat: -23.551,
+            shippingLng: -46.634,
+          },
+          items: [
+            {
+              description: 'Camiseta Básica',
+              weight: 200,
+              length: 25,
+              width: 18,
+              height: 5,
+              quantity: 3,
+            },
+          ],
+        }),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should throw error when store lacks email', async () => {
-      await expect(service.createDelivery({
-        deliveryId: 'delivery-456',
-        storeSettings: {
-          name: 'Minha Loja',
-          phone: '+5511999999999',
-          email: null,
-          zipcode: '01310-100',
-          street: 'Rua da Loja',
-          number: '100',
-          complement: 'Loja 1',
-          district: 'Centro',
-          city: 'São Paulo',
-          state: 'SP',
-          reference: null,
-          lat: -23.5505,
-          lng: -46.6333
-        },
-        order: {
-          shippingRecipient: 'João Silva',
-          shippingPhone: '+5511888888888',
-          shippingEmail: 'joao@email.com',
-          shippingZipcode: '01310-200',
-          shippingStreet: 'Av Paulista',
-          shippingNumber: '500',
-          shippingComplement: 'Apto 10',
-          shippingDistrict: 'Bela Vista',
-          shippingCity: 'São Paulo',
-          shippingState: 'SP',
-          shippingReference: 'Em frente ao parque',
-          shippingLat: -23.5510,
-          shippingLng: -46.6340
-        },
-        items: [
-          {
-            description: 'Camiseta Básica',
-            weight: 200,
-            length: 25,
-            width: 18,
-            height: 5,
-            quantity: 3
-          }
-        ]
-      })).rejects.toThrow(BadRequestException);
+      await expect(
+        service.createDelivery({
+          deliveryId: 'delivery-456',
+          storeSettings: {
+            name: 'Minha Loja',
+            phone: '+5511999999999',
+            email: null,
+            zipcode: '01310-100',
+            street: 'Rua da Loja',
+            number: '100',
+            complement: 'Loja 1',
+            district: 'Centro',
+            city: 'São Paulo',
+            state: 'SP',
+            reference: null,
+            lat: -23.5505,
+            lng: -46.6333,
+          },
+          order: {
+            shippingRecipient: 'João Silva',
+            shippingPhone: '+5511888888888',
+            shippingEmail: 'joao@email.com',
+            shippingZipcode: '01310-200',
+            shippingStreet: 'Av Paulista',
+            shippingNumber: '500',
+            shippingComplement: 'Apto 10',
+            shippingDistrict: 'Bela Vista',
+            shippingCity: 'São Paulo',
+            shippingState: 'SP',
+            shippingReference: 'Em frente ao parque',
+            shippingLat: -23.551,
+            shippingLng: -46.634,
+          },
+          items: [
+            {
+              description: 'Camiseta Básica',
+              weight: 200,
+              length: 25,
+              width: 18,
+              height: 5,
+              quantity: 3,
+            },
+          ],
+        }),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should throw error when customer lacks phone', async () => {
-      await expect(service.createDelivery({
-        deliveryId: 'delivery-456',
-        storeSettings: {
-          name: 'Minha Loja',
-          phone: '+5511999999999',
-          email: 'contato@loja.com',
-          zipcode: '01310-100',
-          street: 'Rua da Loja',
-          number: '100',
-          complement: 'Loja 1',
-          district: 'Centro',
-          city: 'São Paulo',
-          state: 'SP',
-          reference: null,
-          lat: -23.5505,
-          lng: -46.6333
-        },
-        order: {
-          shippingRecipient: 'João Silva',
-          shippingPhone: null,
-          shippingEmail: 'joao@email.com',
-          shippingZipcode: '01310-200',
-          shippingStreet: 'Av Paulista',
-          shippingNumber: '500',
-          shippingComplement: 'Apto 10',
-          shippingDistrict: 'Bela Vista',
-          shippingCity: 'São Paulo',
-          shippingState: 'SP',
-          shippingReference: 'Em frente ao parque',
-          shippingLat: -23.5510,
-          shippingLng: -46.6340
-        },
-        items: [
-          {
-            description: 'Camiseta Básica',
-            weight: 200,
-            length: 25,
-            width: 18,
-            height: 5,
-            quantity: 3
-          }
-        ]
-      })).rejects.toThrow(BadRequestException);
+      await expect(
+        service.createDelivery({
+          deliveryId: 'delivery-456',
+          storeSettings: {
+            name: 'Minha Loja',
+            phone: '+5511999999999',
+            email: 'contato@loja.com',
+            zipcode: '01310-100',
+            street: 'Rua da Loja',
+            number: '100',
+            complement: 'Loja 1',
+            district: 'Centro',
+            city: 'São Paulo',
+            state: 'SP',
+            reference: null,
+            lat: -23.5505,
+            lng: -46.6333,
+          },
+          order: {
+            shippingRecipient: 'João Silva',
+            shippingPhone: null,
+            shippingEmail: 'joao@email.com',
+            shippingZipcode: '01310-200',
+            shippingStreet: 'Av Paulista',
+            shippingNumber: '500',
+            shippingComplement: 'Apto 10',
+            shippingDistrict: 'Bela Vista',
+            shippingCity: 'São Paulo',
+            shippingState: 'SP',
+            shippingReference: 'Em frente ao parque',
+            shippingLat: -23.551,
+            shippingLng: -46.634,
+          },
+          items: [
+            {
+              description: 'Camiseta Básica',
+              weight: 200,
+              length: 25,
+              width: 18,
+              height: 5,
+              quantity: 3,
+            },
+          ],
+        }),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should throw error when customer lacks email', async () => {
-      await expect(service.createDelivery({
-        deliveryId: 'delivery-456',
-        storeSettings: {
-          name: 'Minha Loja',
-          phone: '+5511999999999',
-          email: 'contato@loja.com',
-          zipcode: '01310-100',
-          street: 'Rua da Loja',
-          number: '100',
-          complement: 'Loja 1',
-          district: 'Centro',
-          city: 'São Paulo',
-          state: 'SP',
-          reference: null,
-          lat: -23.5505,
-          lng: -46.6333
-        },
-        order: {
-          shippingRecipient: 'João Silva',
-          shippingPhone: '+5511888888888',
-          shippingEmail: null,
-          shippingZipcode: '01310-200',
-          shippingStreet: 'Av Paulista',
-          shippingNumber: '500',
-          shippingComplement: 'Apto 10',
-          shippingDistrict: 'Bela Vista',
-          shippingCity: 'São Paulo',
-          shippingState: 'SP',
-          shippingReference: 'Em frente ao parque',
-          shippingLat: -23.5510,
-          shippingLng: -46.6340
-        },
-        items: [
-          {
-            description: 'Camiseta Básica',
-            weight: 200,
-            length: 25,
-            width: 18,
-            height: 5,
-            quantity: 3
-          }
-        ]
-      })).rejects.toThrow(BadRequestException);
+      await expect(
+        service.createDelivery({
+          deliveryId: 'delivery-456',
+          storeSettings: {
+            name: 'Minha Loja',
+            phone: '+5511999999999',
+            email: 'contato@loja.com',
+            zipcode: '01310-100',
+            street: 'Rua da Loja',
+            number: '100',
+            complement: 'Loja 1',
+            district: 'Centro',
+            city: 'São Paulo',
+            state: 'SP',
+            reference: null,
+            lat: -23.5505,
+            lng: -46.6333,
+          },
+          order: {
+            shippingRecipient: 'João Silva',
+            shippingPhone: '+5511888888888',
+            shippingEmail: null,
+            shippingZipcode: '01310-200',
+            shippingStreet: 'Av Paulista',
+            shippingNumber: '500',
+            shippingComplement: 'Apto 10',
+            shippingDistrict: 'Bela Vista',
+            shippingCity: 'São Paulo',
+            shippingState: 'SP',
+            shippingReference: 'Em frente ao parque',
+            shippingLat: -23.551,
+            shippingLng: -46.634,
+          },
+          items: [
+            {
+              description: 'Camiseta Básica',
+              weight: 200,
+              length: 25,
+              width: 18,
+              height: 5,
+              quantity: 3,
+            },
+          ],
+        }),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should throw error when API request fails', async () => {
@@ -776,53 +816,55 @@ describe('NinetyNineService', () => {
           expires_in: 3600,
           token_type: 'bearer',
         }),
-      }) as jest.Mock;
+      });
 
-      global.fetch = jest.fn().mockRejectedValue(new Error('API Error')) as jest.Mock;
+      global.fetch = jest.fn().mockRejectedValue(new Error('API Error'));
 
-      await expect(service.createDelivery({
-        deliveryId: 'delivery-456',
-        storeSettings: {
-          name: 'Minha Loja',
-          phone: '+5511999999999',
-          email: 'contato@loja.com',
-          zipcode: '01310-100',
-          street: 'Rua da Loja',
-          number: '100',
-          complement: 'Loja 1',
-          district: 'Centro',
-          city: 'São Paulo',
-          state: 'SP',
-          reference: null,
-          lat: -23.5505,
-          lng: -46.6333
-        },
-        order: {
-          shippingRecipient: 'João Silva',
-          shippingPhone: '+5511888888888',
-          shippingEmail: 'joao@email.com',
-          shippingZipcode: '01310-200',
-          shippingStreet: 'Av Paulista',
-          shippingNumber: '500',
-          shippingComplement: 'Apto 10',
-          shippingDistrict: 'Bela Vista',
-          shippingCity: 'São Paulo',
-          shippingState: 'SP',
-          shippingReference: 'Em frente ao parque',
-          shippingLat: -23.5510,
-          shippingLng: -46.6340
-        },
-        items: [
-          {
-            description: 'Camiseta Básica',
-            weight: 200,
-            length: 25,
-            width: 18,
-            height: 5,
-            quantity: 3
-          }
-        ]
-      })).rejects.toThrow(ServiceUnavailableException);
+      await expect(
+        service.createDelivery({
+          deliveryId: 'delivery-456',
+          storeSettings: {
+            name: 'Minha Loja',
+            phone: '+5511999999999',
+            email: 'contato@loja.com',
+            zipcode: '01310-100',
+            street: 'Rua da Loja',
+            number: '100',
+            complement: 'Loja 1',
+            district: 'Centro',
+            city: 'São Paulo',
+            state: 'SP',
+            reference: null,
+            lat: -23.5505,
+            lng: -46.6333,
+          },
+          order: {
+            shippingRecipient: 'João Silva',
+            shippingPhone: '+5511888888888',
+            shippingEmail: 'joao@email.com',
+            shippingZipcode: '01310-200',
+            shippingStreet: 'Av Paulista',
+            shippingNumber: '500',
+            shippingComplement: 'Apto 10',
+            shippingDistrict: 'Bela Vista',
+            shippingCity: 'São Paulo',
+            shippingState: 'SP',
+            shippingReference: 'Em frente ao parque',
+            shippingLat: -23.551,
+            shippingLng: -46.634,
+          },
+          items: [
+            {
+              description: 'Camiseta Básica',
+              weight: 200,
+              length: 25,
+              width: 18,
+              height: 5,
+              quantity: 3,
+            },
+          ],
+        }),
+      ).rejects.toThrow(ServiceUnavailableException);
     });
 
     it('should throw error when API does not return tracking ID', async () => {
@@ -833,7 +875,7 @@ describe('NinetyNineService', () => {
           expires_in: 3600,
           token_type: 'bearer',
         }),
-      }) as jest.Mock;
+      });
 
       global.fetch = jest.fn().mockResolvedValue({
         ok: true,
@@ -841,51 +883,53 @@ describe('NinetyNineService', () => {
           _id: 'order-123',
           shipments: [], // Empty shipments
         }),
-      }) as jest.Mock;
+      });
 
-      await expect(service.createDelivery({
-        deliveryId: 'delivery-456',
-        storeSettings: {
-          name: 'Minha Loja',
-          phone: '+5511999999999',
-          email: 'contato@loja.com',
-          zipcode: '01310-100',
-          street: 'Rua da Loja',
-          number: '100',
-          complement: 'Loja 1',
-          district: 'Centro',
-          city: 'São Paulo',
-          state: 'SP',
-          reference: null,
-          lat: -23.5505,
-          lng: -46.6333
-        },
-        order: {
-          shippingRecipient: 'João Silva',
-          shippingPhone: '+5511888888888',
-          shippingEmail: 'joao@email.com',
-          shippingZipcode: '01310-200',
-          shippingStreet: 'Av Paulista',
-          shippingNumber: '500',
-          shippingComplement: 'Apto 10',
-          shippingDistrict: 'Bela Vista',
-          shippingCity: 'São Paulo',
-          shippingState: 'SP',
-          shippingReference: 'Em frente ao parque',
-          shippingLat: -23.5510,
-          shippingLng: -46.6340
-        },
-        items: [
-          {
-            description: 'Camiseta Básica',
-            weight: 200,
-            length: 25,
-            width: 18,
-            height: 5,
-            quantity: 3
-          }
-        ]
-      })).rejects.toThrow(ServiceUnavailableException);
+      await expect(
+        service.createDelivery({
+          deliveryId: 'delivery-456',
+          storeSettings: {
+            name: 'Minha Loja',
+            phone: '+5511999999999',
+            email: 'contato@loja.com',
+            zipcode: '01310-100',
+            street: 'Rua da Loja',
+            number: '100',
+            complement: 'Loja 1',
+            district: 'Centro',
+            city: 'São Paulo',
+            state: 'SP',
+            reference: null,
+            lat: -23.5505,
+            lng: -46.6333,
+          },
+          order: {
+            shippingRecipient: 'João Silva',
+            shippingPhone: '+5511888888888',
+            shippingEmail: 'joao@email.com',
+            shippingZipcode: '01310-200',
+            shippingStreet: 'Av Paulista',
+            shippingNumber: '500',
+            shippingComplement: 'Apto 10',
+            shippingDistrict: 'Bela Vista',
+            shippingCity: 'São Paulo',
+            shippingState: 'SP',
+            shippingReference: 'Em frente ao parque',
+            shippingLat: -23.551,
+            shippingLng: -46.634,
+          },
+          items: [
+            {
+              description: 'Camiseta Básica',
+              weight: 200,
+              length: 25,
+              width: 18,
+              height: 5,
+              quantity: 3,
+            },
+          ],
+        }),
+      ).rejects.toThrow(ServiceUnavailableException);
     });
   });
 
@@ -909,7 +953,7 @@ describe('NinetyNineService', () => {
           expires_in: 3600,
           token_type: 'bearer',
         }),
-      }) as jest.Mock;
+      });
 
       global.fetch = jest.fn().mockResolvedValue({
         ok: true,
@@ -930,7 +974,7 @@ describe('NinetyNineService', () => {
             },
           ],
         }),
-      }) as jest.Mock;
+      });
 
       const result = await service.getDeliveryStatus('tracking-123');
 
@@ -949,7 +993,7 @@ describe('NinetyNineService', () => {
           expires_in: 3600,
           token_type: 'bearer',
         }),
-      }) as jest.Mock;
+      });
 
       const statusTests = [
         { code: '1002', expected: DeliveryStatus.REQUESTING },
@@ -970,7 +1014,7 @@ describe('NinetyNineService', () => {
             InternalKey: 'delivery-456',
             Events: [],
           }),
-        }) as jest.Mock;
+        });
 
         const result = await service.getDeliveryStatus('tracking-123');
         expect(result.status).toBe(test.expected);
@@ -998,12 +1042,12 @@ describe('NinetyNineService', () => {
           expires_in: 3600,
           token_type: 'bearer',
         }),
-      }) as jest.Mock;
+      });
 
       global.fetch = jest.fn().mockResolvedValue({
         ok: true,
         json: async () => ({}),
-      }) as jest.Mock;
+      });
 
       const result = await service.cancelDelivery('tracking-123');
 
@@ -1018,11 +1062,13 @@ describe('NinetyNineService', () => {
           expires_in: 3600,
           token_type: 'bearer',
         }),
-      }) as jest.Mock;
+      });
 
-      global.fetch = jest.fn().mockRejectedValue(new Error('API Error')) as jest.Mock;
+      global.fetch = jest.fn().mockRejectedValue(new Error('API Error'));
 
-      await expect(service.cancelDelivery('tracking-123')).rejects.toThrow(ServiceUnavailableException);
+      await expect(service.cancelDelivery('tracking-123')).rejects.toThrow(
+        ServiceUnavailableException,
+      );
     });
   });
 
@@ -1045,16 +1091,23 @@ describe('NinetyNineService', () => {
       mockConfigService.get.mockReturnValue('test-secret');
       const crypto = require('crypto');
       const body = 'test-body';
-      const expected = crypto.createHmac('sha256', 'test-secret').update(body).digest('hex');
+      const expected = crypto
+        .createHmac('sha256', 'test-secret')
+        .update(body)
+        .digest('hex');
 
-      const result = service.validateWebhook(body, { 'x-99minutos-signature': expected });
+      const result = service.validateWebhook(body, {
+        'x-99minutos-signature': expected,
+      });
       expect(result).toBe(true);
     });
 
     it('should reject invalid webhook signature', () => {
       mockConfigService.get.mockReturnValue('test-secret');
 
-      const result = service.validateWebhook('test-body', { 'x-99minutos-signature': 'invalid-signature' });
+      const result = service.validateWebhook('test-body', {
+        'x-99minutos-signature': 'invalid-signature',
+      });
       expect(result).toBe(false);
     });
 
@@ -1062,10 +1115,15 @@ describe('NinetyNineService', () => {
       mockConfigService.get.mockReturnValue('test-secret');
       const crypto = require('crypto');
       const body = 'test-body';
-      const expected = crypto.createHmac('sha256', 'test-secret').update(body).digest('hex');
+      const expected = crypto
+        .createHmac('sha256', 'test-secret')
+        .update(body)
+        .digest('hex');
 
       // Only x-99minutos-signature should be accepted
-      const result = service.validateWebhook(body, { 'x-ninenine-signature': expected });
+      const result = service.validateWebhook(body, {
+        'x-ninenine-signature': expected,
+      });
       expect(result).toBe(false);
     });
   });
@@ -1136,33 +1194,71 @@ describe('NinetyNineService', () => {
     it('should map 99minutos status codes to internal delivery status', () => {
       const mappingTests = [
         { code: '1001', name: 'DRAFT', expected: DeliveryStatus.QUOTED },
-        { code: '1002', name: 'CONFIRMED', expected: DeliveryStatus.REQUESTING },
-        { code: '2002', name: 'CONDUCTOR ASIGNADO', expected: DeliveryStatus.SEARCHING_DRIVER },
-        { code: '2003', name: 'RECOGIDA CONFIRMADA', expected: DeliveryStatus.DRIVER_ASSIGNED },
-        { code: '4001', name: 'ON ROAD TO DELIVERY', expected: DeliveryStatus.IN_TRANSIT },
+        {
+          code: '1002',
+          name: 'CONFIRMED',
+          expected: DeliveryStatus.REQUESTING,
+        },
+        {
+          code: '2002',
+          name: 'CONDUCTOR ASIGNADO',
+          expected: DeliveryStatus.SEARCHING_DRIVER,
+        },
+        {
+          code: '2003',
+          name: 'RECOGIDA CONFIRMADA',
+          expected: DeliveryStatus.DRIVER_ASSIGNED,
+        },
+        {
+          code: '4001',
+          name: 'ON ROAD TO DELIVERY',
+          expected: DeliveryStatus.IN_TRANSIT,
+        },
         { code: '4002', name: 'DELIVERED', expected: DeliveryStatus.DELIVERED },
         { code: '8003', name: 'CANCELLED', expected: DeliveryStatus.CANCELLED },
-        { code: '2101', name: 'UNSUCCESSFUL PICKUP', expected: DeliveryStatus.FAILED },
-        { code: '4101', name: 'UNSUCCESSFUL DELIVERY', expected: DeliveryStatus.FAILED },
+        {
+          code: '2101',
+          name: 'UNSUCCESSFUL PICKUP',
+          expected: DeliveryStatus.FAILED,
+        },
+        {
+          code: '4101',
+          name: 'UNSUCCESSFUL DELIVERY',
+          expected: DeliveryStatus.FAILED,
+        },
       ];
 
       for (const test of mappingTests) {
-        const result = service['mapNinetyNineStatusToDeliveryStatus'](test.code, test.name);
+        const result = service.mapStatusToDeliveryStatus(test.code, test.name);
         expect(result).toBe(test.expected);
       }
     });
 
-    it('should return FAILED for unknown status codes', () => {
-      const result = service['mapNinetyNineStatusToDeliveryStatus']('9999', 'UNKNOWN');
-      expect(result).toBe(DeliveryStatus.FAILED);
+    it('should return null for unknown status codes', () => {
+      const result = service.mapStatusToDeliveryStatus('9999', 'UNKNOWN');
+      expect(result).toBeNull();
     });
   });
 
   describe('Package Calculation', () => {
     it('should calculate package dimensions correctly', () => {
       const items = [
-        { description: 'Item 1', weight: 500, length: 20, width: 15, height: 10, quantity: 2 },
-        { description: 'Item 2', weight: 300, length: 25, width: 18, height: 12, quantity: 1 },
+        {
+          description: 'Item 1',
+          weight: 500,
+          length: 20,
+          width: 15,
+          height: 10,
+          quantity: 2,
+        },
+        {
+          description: 'Item 2',
+          weight: 300,
+          length: 25,
+          width: 18,
+          height: 12,
+          quantity: 1,
+        },
       ];
 
       const result = service['calculatePackageDimensions'](items);
@@ -1174,16 +1270,33 @@ describe('NinetyNineService', () => {
     });
 
     it('should throw error for empty items', () => {
-      expect(() => service['calculatePackageDimensions']([])).toThrow(BadRequestException);
+      expect(() => service['calculatePackageDimensions']([])).toThrow(
+        BadRequestException,
+      );
     });
 
     it('should determine package size correctly', () => {
       const tests = [
-        { dimensions: { weight: 100, length: 5, width: 5, height: 5 }, expected: 'xs' }, // 125 cm³
-        { dimensions: { weight: 1000, length: 15, width: 15, height: 15 }, expected: 's' }, // 3,375 cm³
-        { dimensions: { weight: 2000, length: 25, width: 25, height: 25 }, expected: 'l' }, // 15,625 cm³ -> actually 'l' based on implementation (>= 15000)
-        { dimensions: { weight: 5000, length: 35, width: 35, height: 35 }, expected: 'xl' }, // 42,875 cm³
-        { dimensions: { weight: 10000, length: 50, width: 50, height: 50 }, expected: 'xl' }, // 125,000 cm³
+        {
+          dimensions: { weight: 100, length: 5, width: 5, height: 5 },
+          expected: 'xs',
+        }, // 125 cm³
+        {
+          dimensions: { weight: 1000, length: 15, width: 15, height: 15 },
+          expected: 's',
+        }, // 3,375 cm³
+        {
+          dimensions: { weight: 2000, length: 25, width: 25, height: 25 },
+          expected: 'l',
+        }, // 15,625 cm³ -> actually 'l' based on implementation (>= 15000)
+        {
+          dimensions: { weight: 5000, length: 35, width: 35, height: 35 },
+          expected: 'xl',
+        }, // 42,875 cm³
+        {
+          dimensions: { weight: 10000, length: 50, width: 50, height: 50 },
+          expected: 'xl',
+        }, // 125,000 cm³
       ];
 
       for (const test of tests) {

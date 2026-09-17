@@ -4,17 +4,35 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { OrderOrigin, OrderStatus, Prisma, StockMovementType, UserRole } from '@prisma/client';
+import {
+  Order,
+  OrderItem,
+  OrderOrigin,
+  OrderStatus,
+  Prisma,
+  Product,
+  StockMovementType,
+  UserRole,
+} from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
+
+type OrderWithItems = Order & { items: OrderItem[] };
+type SerializedUser = { id: string; role: UserRole };
+
+type ValidatedOrderItem = {
+  cartItem: OrderItem;
+  product: Product;
+  itemTotal: Prisma.Decimal;
+};
 
 @Injectable()
 export class OrdersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  private serializeItem(item: any, includeCostPrice: boolean) {
-    const base: any = {
+  private serializeItem(item: OrderItem, includeCostPrice: boolean) {
+    const base: Record<string, unknown> = {
       id: item.id,
       productId: item.productId,
       productName: item.productName,
@@ -30,7 +48,7 @@ export class OrdersService {
     return base;
   }
 
-  private serializeOrder(order: any, user: any) {
+  private serializeOrder(order: OrderWithItems, user: SerializedUser) {
     const includeCostPrice = user.role === UserRole.OWNER;
     return {
       id: order.id,
@@ -54,8 +72,103 @@ export class OrdersService {
       shippingReference: order.shippingReference,
       createdAt: order.createdAt,
       updatedAt: order.updatedAt,
-      items: (order.items ?? []).map((item: any) => this.serializeItem(item, includeCostPrice)),
+      items: (order.items ?? []).map((item) =>
+        this.serializeItem(item, includeCostPrice),
+      ),
     };
+  }
+
+  private async validateCartItems(
+    tx: Prisma.TransactionClient,
+    cartItems: OrderItem[],
+  ) {
+    const validatedItems: ValidatedOrderItem[] = [];
+    let subtotal = new Prisma.Decimal(0);
+
+    for (const cartItem of cartItems) {
+      const product = await tx.product.findUnique({
+        where: { id: cartItem.productId },
+      });
+      if (!product) {
+        throw new NotFoundException(`Product not found: ${cartItem.productId}`);
+      }
+      if (!product.active) {
+        throw new BadRequestException(`Product is not active: ${product.name}`);
+      }
+      if (cartItem.quantity > product.stock) {
+        throw new BadRequestException(
+          `Insufficient stock for product ${product.name}`,
+        );
+      }
+      if (product.costPrice === null || product.costPrice === undefined) {
+        throw new BadRequestException(
+          `Product does not have a costPrice registered: ${product.name}`,
+        );
+      }
+
+      const itemTotal = new Prisma.Decimal(product.price.toString()).mul(
+        cartItem.quantity,
+      );
+      subtotal = subtotal.add(itemTotal);
+      validatedItems.push({ cartItem, product, itemTotal });
+    }
+
+    return { validatedItems, subtotal };
+  }
+
+  private async persistOrderItems(
+    tx: Prisma.TransactionClient,
+    orderId: string,
+    userId: string,
+    validatedItems: ValidatedOrderItem[],
+  ) {
+    for (const { cartItem, product, itemTotal } of validatedItems) {
+      const quantity = cartItem.quantity;
+      const previousStock = product.stock;
+
+      const decrementResult = await tx.product.updateMany({
+        where: {
+          id: product.id,
+          stock: { gte: quantity },
+        },
+        data: {
+          stock: { decrement: quantity },
+        },
+      });
+
+      if (decrementResult.count !== 1) {
+        throw new BadRequestException(
+          `Insufficient stock for product ${product.name}`,
+        );
+      }
+
+      const currentStock = previousStock - quantity;
+
+      await tx.orderItem.create({
+        data: {
+          orderId,
+          productId: product.id,
+          productName: product.name,
+          productSku: product.sku,
+          quantity,
+          price: product.price,
+          costPrice: product.costPrice,
+          total: itemTotal,
+        },
+      });
+
+      await tx.stockMovement.create({
+        data: {
+          productId: product.id,
+          type: StockMovementType.SALE,
+          quantity,
+          previousStock,
+          currentStock,
+          reason: 'Order creation',
+          createdById: userId,
+        },
+      });
+    }
   }
 
   async create(userId: string, data: CreateOrderDto) {
@@ -77,34 +190,10 @@ export class OrdersService {
         throw new BadRequestException('Cart is empty');
       }
 
-      const validatedItems: Array<{
-        cartItem: any;
-        product: any;
-        itemTotal: Prisma.Decimal;
-      }> = [];
-
-      let subtotal = new Prisma.Decimal(0);
-
-      for (const cartItem of cart.items) {
-        const product = await tx.product.findUnique({ where: { id: cartItem.productId } });
-        if (!product) {
-          throw new NotFoundException(`Product not found: ${cartItem.productId}`);
-        }
-        if (!product.active) {
-          throw new BadRequestException(`Product is not active: ${product.name}`);
-        }
-        if (cartItem.quantity > product.stock) {
-          throw new BadRequestException(`Insufficient stock for product ${product.name}`);
-        }
-        if (product.costPrice === null || product.costPrice === undefined) {
-          throw new BadRequestException(`Product does not have a costPrice registered: ${product.name}`);
-        }
-
-        const itemTotal = new Prisma.Decimal(product.price.toString()).mul(cartItem.quantity);
-        subtotal = subtotal.add(itemTotal);
-        validatedItems.push({ cartItem, product, itemTotal });
-      }
-
+      const { validatedItems, subtotal } = await this.validateCartItems(
+        tx,
+        cart.items,
+      );
       const shipping = new Prisma.Decimal(0);
       const discount = new Prisma.Decimal(0);
       const total = subtotal.sub(discount).add(shipping);
@@ -131,57 +220,7 @@ export class OrdersService {
         },
       });
 
-      for (const entry of validatedItems) {
-        const { cartItem, product, itemTotal } = entry;
-        const quantity = cartItem.quantity;
-
-        const decrementResult = await tx.product.updateMany({
-          where: {
-            id: product.id,
-            stock: { gte: quantity },
-          },
-          data: {
-            stock: { decrement: quantity },
-          },
-        });
-
-        if (decrementResult.count !== 1) {
-          throw new BadRequestException(`Insufficient stock for product ${product.name}`);
-        }
-
-        const updatedProduct = await tx.product.findUnique({ where: { id: product.id } });
-        if (!updatedProduct) {
-          throw new NotFoundException(`Product not found: ${product.id}`);
-        }
-
-        const previousStock = updatedProduct.stock + quantity;
-        const currentStock = updatedProduct.stock;
-
-        await tx.orderItem.create({
-          data: {
-            orderId: order.id,
-            productId: product.id,
-            productName: product.name,
-            productSku: product.sku,
-            quantity,
-            price: product.price,
-            costPrice: product.costPrice,
-            total: itemTotal,
-          },
-        });
-
-        await tx.stockMovement.create({
-          data: {
-            productId: product.id,
-            type: StockMovementType.SALE,
-            quantity,
-            previousStock,
-            currentStock,
-            reason: 'Order creation',
-            createdById: userId,
-          },
-        });
-      }
+      await this.persistOrderItems(tx, order.id, userId, validatedItems);
 
       await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
 
@@ -198,7 +237,7 @@ export class OrdersService {
     });
   }
 
-  async findAll(user: any) {
+  async findAll(user: SerializedUser) {
     const isCustomer = user.role === UserRole.CUSTOMER;
 
     const orders = await this.prisma.order.findMany({
@@ -207,11 +246,14 @@ export class OrdersService {
       include: { items: true },
     });
 
-    const responseRole = user.role === UserRole.OWNER ? UserRole.OWNER : UserRole.CUSTOMER;
-    return orders.map((order: any) => this.serializeOrder(order, { role: responseRole }));
+    const responseRole =
+      user.role === UserRole.OWNER ? UserRole.OWNER : UserRole.CUSTOMER;
+    return orders.map((order) =>
+      this.serializeOrder(order, { role: responseRole }),
+    );
   }
 
-  async findOne(user: any, id: string) {
+  async findOne(user: SerializedUser, id: string) {
     const order = await this.prisma.order.findUnique({
       where: { id },
       include: { items: true },
@@ -228,7 +270,11 @@ export class OrdersService {
     return this.serializeOrder(order, user);
   }
 
-  async updateStatus(user: any, id: string, data: UpdateOrderStatusDto) {
+  async updateStatus(
+    user: SerializedUser,
+    id: string,
+    data: UpdateOrderStatusDto,
+  ) {
     const order = await this.prisma.order.findUnique({ where: { id } });
     if (!order) {
       throw new NotFoundException('Order not found');
@@ -243,15 +289,22 @@ export class OrdersService {
     ]);
 
     if (!allowed.has(data.status)) {
-      const blocked = new Set<OrderStatus>([OrderStatus.CANCELLED, OrderStatus.REFUNDED]);
+      const blocked = new Set<OrderStatus>([
+        OrderStatus.CANCELLED,
+        OrderStatus.REFUNDED,
+      ]);
       if (blocked.has(data.status)) {
-        throw new BadRequestException('Order status CANCELLED or REFUNDED is not available yet.');
+        throw new BadRequestException(
+          'Order status CANCELLED or REFUNDED is not available yet.',
+        );
       }
       throw new BadRequestException('Invalid order status');
     }
 
     if (user.role !== UserRole.ADMIN && user.role !== UserRole.OWNER) {
-      throw new ForbiddenException('Only ADMIN or OWNER can update order status');
+      throw new ForbiddenException(
+        'Only ADMIN or OWNER can update order status',
+      );
     }
 
     const updated = await this.prisma.order.update({
@@ -263,9 +316,11 @@ export class OrdersService {
     return this.serializeOrder(updated, user);
   }
 
-  async remove(user: any, id: string) {
+  async remove(user: SerializedUser, id: string) {
     void user;
     void id;
-    throw new ForbiddenException('Orders are historical records and cannot be deleted.');
+    throw new ForbiddenException(
+      'Orders are historical records and cannot be deleted.',
+    );
   }
 }

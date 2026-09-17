@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { API_URL } from "@/lib/api";
+import { CartProvider } from '@/providers/CartProvider';
+import { CartUiProvider } from '@/providers/CartUiProvider';
 import "./globals.css";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3001";
@@ -39,8 +41,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   void API_URL;
 
   return (
-    <html lang="pt-BR" className="h-full antialiased">
-      <body className="min-h-full flex flex-col">{children}</body>
+        <html lang="pt-BR" className="h-full antialiased">
+      <body className="min-h-full flex flex-col">
+        {/* CartProvider: estado de dados (GET/POST/PATCH/DELETE /cart)
+            CartUiProvider: estado de UI da gaveta (aberto/fechado) */}
+        <CartProvider>
+          <CartUiProvider>{children}</CartUiProvider>
+        </CartProvider>
+      </body>
     </html>
   );
 }

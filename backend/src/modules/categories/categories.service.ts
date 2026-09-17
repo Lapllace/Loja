@@ -1,4 +1,9 @@
-import { Injectable, BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
@@ -9,7 +14,9 @@ export class CategoriesService {
 
   async create(data: CreateCategoryDto) {
     if (data.parentId) {
-      const parent = await this.prisma.category.findUnique({ where: { id: data.parentId } });
+      const parent = await this.prisma.category.findUnique({
+        where: { id: data.parentId },
+      });
       if (!parent) {
         throw new BadRequestException('Parent category not found');
       }
@@ -108,10 +115,14 @@ export class CategoriesService {
   async update(id: string, data: UpdateCategoryDto) {
     if (data.parentId !== undefined) {
       if (data.parentId === id) {
-        throw new BadRequestException('parentId cannot reference the category itself');
+        throw new BadRequestException(
+          'parentId cannot reference the category itself',
+        );
       }
       if (data.parentId) {
-        const parent = await this.prisma.category.findUnique({ where: { id: data.parentId } });
+        const parent = await this.prisma.category.findUnique({
+          where: { id: data.parentId },
+        });
         if (!parent) {
           throw new BadRequestException('Parent category not found');
         }
@@ -121,7 +132,8 @@ export class CategoriesService {
     const updateData: any = {};
     if (data.name !== undefined) updateData.name = data.name;
     if (data.slug !== undefined) updateData.slug = data.slug;
-    if (data.description !== undefined) updateData.description = data.description;
+    if (data.description !== undefined)
+      updateData.description = data.description;
     if (data.parentId !== undefined) updateData.parentId = data.parentId;
     if (data.imageUrl !== undefined) updateData.imageUrl = data.imageUrl;
     if (data.active !== undefined) updateData.active = data.active;
@@ -160,14 +172,20 @@ export class CategoriesService {
       throw new NotFoundException('Category not found');
     }
 
-    const childCount = await this.prisma.category.count({ where: { parentId: id } });
+    const childCount = await this.prisma.category.count({
+      where: { parentId: id },
+    });
     if (childCount > 0) {
       throw new ConflictException('Cannot delete category with subcategories');
     }
 
-    const productCount = await this.prisma.product.count({ where: { categoryId: id } });
+    const productCount = await this.prisma.product.count({
+      where: { categoryId: id },
+    });
     if (productCount > 0) {
-      throw new ConflictException('Cannot delete category with linked products');
+      throw new ConflictException(
+        'Cannot delete category with linked products',
+      );
     }
 
     await this.prisma.category.delete({ where: { id } });

@@ -75,7 +75,9 @@ describe('AddressesService', () => {
       state: 'SP',
     });
 
-    expect(prismaMock.address.count).toHaveBeenCalledWith({ where: { userId, type: AddressType.SHIPPING } });
+    expect(prismaMock.address.count).toHaveBeenCalledWith({
+      where: { userId, type: AddressType.SHIPPING },
+    });
     expect(prismaMock.address.updateMany).toHaveBeenCalledWith({
       where: { userId, type: AddressType.SHIPPING, isDefault: true },
       data: { isDefault: false },
@@ -129,11 +131,18 @@ describe('AddressesService', () => {
   it('should throw 404 when trying to access another user address', async () => {
     prismaMock.address.findFirst.mockResolvedValue(null);
 
-    await expect(service.findOne(userId, addressId)).rejects.toThrow(NotFoundException);
+    await expect(service.findOne(userId, addressId)).rejects.toThrow(
+      NotFoundException,
+    );
   });
 
   it('should update own address', async () => {
-    const updated = { ...addressMock, street: 'Rua B', number: '456', updatedAt: new Date() };
+    const updated = {
+      ...addressMock,
+      street: 'Rua B',
+      number: '456',
+      updatedAt: new Date(),
+    };
     prismaMock.address.findFirst.mockResolvedValue(addressMock);
     prismaMock.address.update.mockResolvedValue(updated);
 
@@ -142,7 +151,9 @@ describe('AddressesService', () => {
       number: '456',
     });
 
-    expect(prismaMock.address.findFirst).toHaveBeenCalledWith({ where: { id: addressId, userId } });
+    expect(prismaMock.address.findFirst).toHaveBeenCalledWith({
+      where: { id: addressId, userId },
+    });
     expect(prismaMock.address.update).toHaveBeenCalledWith({
       where: { id: addressId },
       data: { street: 'Rua B', number: '456' },
@@ -154,7 +165,9 @@ describe('AddressesService', () => {
   it('should throw 404 when updating another user address', async () => {
     prismaMock.address.findFirst.mockResolvedValue(null);
 
-    await expect(service.update(userId, addressId, { city: 'Rio' })).rejects.toThrow(NotFoundException);
+    await expect(
+      service.update(userId, addressId, { city: 'Rio' }),
+    ).rejects.toThrow(NotFoundException);
   });
 
   it('should delete own non-default address', async () => {
@@ -164,14 +177,18 @@ describe('AddressesService', () => {
 
     const result = await service.remove(userId, addressId);
 
-    expect(prismaMock.address.delete).toHaveBeenCalledWith({ where: { id: addressId } });
+    expect(prismaMock.address.delete).toHaveBeenCalledWith({
+      where: { id: addressId },
+    });
     expect(result).toEqual({ id: addressId });
   });
 
   it('should throw 404 when deleting another user address', async () => {
     prismaMock.address.findFirst.mockResolvedValue(null);
 
-    await expect(service.remove(userId, addressId)).rejects.toThrow(NotFoundException);
+    await expect(service.remove(userId, addressId)).rejects.toThrow(
+      NotFoundException,
+    );
   });
 
   it('should promote another address to default when deleting the default address', async () => {
@@ -180,7 +197,10 @@ describe('AddressesService', () => {
       .mockResolvedValueOnce(addressMock)
       .mockResolvedValueOnce(replacement);
     prismaMock.address.delete.mockResolvedValue({ id: addressId });
-    prismaMock.address.update.mockResolvedValue({ ...replacement, isDefault: true });
+    prismaMock.address.update.mockResolvedValue({
+      ...replacement,
+      isDefault: true,
+    });
 
     const result = await service.remove(userId, addressId);
 
@@ -190,8 +210,13 @@ describe('AddressesService', () => {
 
   it('should set an address as default using setDefault endpoint', async () => {
     prismaMock.address.findFirst.mockResolvedValue(addressMock);
-    prismaMock.$transaction.mockImplementation(async (callback: any) => callback(prismaMock));
-    prismaMock.address.update.mockResolvedValue({ ...addressMock, isDefault: true });
+    prismaMock.$transaction.mockImplementation(async (callback: any) =>
+      callback(prismaMock),
+    );
+    prismaMock.address.update.mockResolvedValue({
+      ...addressMock,
+      isDefault: true,
+    });
 
     const result = await service.setDefault(userId, addressId);
 

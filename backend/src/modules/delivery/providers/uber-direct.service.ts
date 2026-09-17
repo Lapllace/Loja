@@ -42,26 +42,43 @@ export class UberDirectService {
     ].filter((value) => !value);
 
     if (missing.length > 0) {
-      throw new ServiceUnavailableException('Uber Direct credentials are not configured. Integration is ready but disabled until official credentials are provided.');
+      throw new ServiceUnavailableException(
+        'Uber Direct credentials are not configured. Integration is ready but disabled until official credentials are provided.',
+      );
     }
   }
 
-  async quoteDelivery(payload: Record<string, unknown>): Promise<DeliveryProviderResult> {
+  async quoteDelivery(
+    payload: Record<string, unknown>,
+  ): Promise<DeliveryProviderResult> {
     this.ensureConfigured();
-    throw new ServiceUnavailableException('Uber Direct quote flow is not enabled without the official current API contract and valid credentials.');
+    throw new ServiceUnavailableException(
+      'Uber Direct quote flow is not enabled without the official current API contract and valid credentials.',
+    );
   }
 
-  async createDelivery(payload: Record<string, unknown>): Promise<DeliveryProviderResult> {
+  async createDelivery(
+    payload: Record<string, unknown>,
+  ): Promise<DeliveryProviderResult> {
     this.ensureConfigured();
-    throw new ServiceUnavailableException('Uber Direct delivery creation is not enabled without the official current API contract and valid credentials.');
+    throw new ServiceUnavailableException(
+      'Uber Direct delivery creation is not enabled without the official current API contract and valid credentials.',
+    );
   }
 
-  async getDeliveryStatus(externalDeliveryId: string): Promise<{ externalDeliveryId: string | null }> {
+  async getDeliveryStatus(
+    externalDeliveryId: string,
+  ): Promise<{ externalDeliveryId: string | null }> {
     this.ensureConfigured();
-    throw new ServiceUnavailableException('Uber Direct status lookup is not enabled without the official current API contract and valid credentials.');
+    throw new ServiceUnavailableException(
+      'Uber Direct status lookup is not enabled without the official current API contract and valid credentials.',
+    );
   }
 
-  validateWebhook(rawBody: string | Buffer, headers: Record<string, string | string[] | undefined> = {}) {
+  validateWebhook(
+    rawBody: string | Buffer,
+    headers: Record<string, string | string[] | undefined> = {},
+  ) {
     const secret = this.getWebhookSecret();
     if (!secret) {
       return false;
@@ -77,9 +94,17 @@ export class UberDirectService {
       return false;
     }
 
-    const bodyText = Buffer.isBuffer(rawBody) ? rawBody.toString('utf8') : String(rawBody ?? '');
+    const bodyText = Buffer.isBuffer(rawBody)
+      ? rawBody.toString('utf8')
+      : String(rawBody ?? '');
     const crypto = require('crypto');
-    const expected = crypto.createHmac('sha256', secret).update(bodyText).digest('hex');
-    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(String(provided).trim()));
+    const expected = crypto
+      .createHmac('sha256', secret)
+      .update(bodyText)
+      .digest('hex');
+    return crypto.timingSafeEqual(
+      Buffer.from(expected),
+      Buffer.from(String(provided).trim()),
+    );
   }
 }

@@ -1,4 +1,8 @@
-import { Injectable, ServiceUnavailableException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  ServiceUnavailableException,
+  BadRequestException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash, timingSafeEqual } from 'crypto';
 
@@ -7,7 +11,10 @@ export class PagBankService {
   constructor(private readonly config: ConfigService) {}
 
   private getApiUrl(): string {
-    return this.config.get<string>('PAGBANK_API_URL', 'https://sandbox.api.pagseguro.com');
+    return this.config.get<string>(
+      'PAGBANK_API_URL',
+      'https://sandbox.api.pagseguro.com',
+    );
   }
 
   private getApiToken(): string | undefined {
@@ -28,7 +35,9 @@ export class PagBankService {
 
   private ensureConfigured(): void {
     if (!this.getApiToken()) {
-      throw new ServiceUnavailableException('PagBank API token is not configured');
+      throw new ServiceUnavailableException(
+        'PagBank API token is not configured',
+      );
     }
   }
 
@@ -36,7 +45,9 @@ export class PagBankService {
     this.ensureConfigured();
 
     if (!order || !Array.isArray(order.items) || order.items.length === 0) {
-      throw new BadRequestException('Order has no items to create a PagBank checkout');
+      throw new BadRequestException(
+        'Order has no items to create a PagBank checkout',
+      );
     }
 
     const expectedTotalCents = order.items.reduce((sum: number, item: any) => {
@@ -52,7 +63,9 @@ export class PagBankService {
     }
 
     if (expectedTotalCents !== orderTotalCents) {
-      throw new BadRequestException('Order total does not match the calculated checkout total');
+      throw new BadRequestException(
+        'Order total does not match the calculated checkout total',
+      );
     }
 
     const referenceId = `order-${order.number ?? order.id}`;
@@ -65,13 +78,17 @@ export class PagBankService {
       items: (order.items ?? []).map((item: any) => ({
         name: item.productName || item.product?.name || 'Produto',
         quantity: Number(item.quantity ?? 1),
-        unit_amount: Math.round(Number(item.price ?? item.unit_price ?? 0) * 100),
+        unit_amount: Math.round(
+          Number(item.price ?? item.unit_price ?? 0) * 100,
+        ),
       })),
       payment_methods: [{ type: 'PIX' }],
       notification_urls: [
         `${this.config.get<string>('APP_URL', 'http://localhost:3000')}/api/payments/webhooks/pagbank`,
       ],
-      return_url: this.getReturnUrl() ?? `${this.config.get<string>('APP_URL', 'http://localhost:3000')}/checkout/return`,
+      return_url:
+        this.getReturnUrl() ??
+        `${this.config.get<string>('APP_URL', 'http://localhost:3000')}/checkout/return`,
       amount: {
         value: expectedTotalCents,
         currency: 'BRL',
@@ -83,28 +100,43 @@ export class PagBankService {
       },
     };
 
-    const response = await fetch(`${this.getApiUrl().replace(/\/$/, '')}/checkouts`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.getApiToken()}`,
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
+    const response = await fetch(
+      `${this.getApiUrl().replace(/\/$/, '')}/checkouts`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.getApiToken()}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(payload),
       },
-      body: JSON.stringify(payload),
-    });
+    );
 
     if (!response.ok) {
       const detail = await response.text();
-      throw new ServiceUnavailableException(`PagBank checkout request failed: ${detail}`);
+      throw new ServiceUnavailableException(
+        `PagBank checkout request failed: ${detail}`,
+      );
     }
 
-    const data = (await response.json()) as any;
-    const externalTransactionId = data?.id ?? data?.transaction_id ?? data?.transactionId ?? data?.payment?.id ?? null;
+    const data = await response.json();
+    const externalTransactionId =
+      data?.id ??
+      data?.transaction_id ??
+      data?.transactionId ??
+      data?.payment?.id ??
+      null;
     if (!externalTransactionId) {
-      throw new ServiceUnavailableException('PagBank checkout did not return a valid external transaction id');
+      throw new ServiceUnavailableException(
+        'PagBank checkout did not return a valid external transaction id',
+      );
     }
 
-    const checkoutUrl = data?.links?.find((link: any) => link?.rel === 'PAY')?.href ?? data?.payment_url ?? null;
+    const checkoutUrl =
+      data?.links?.find((link: any) => link?.rel === 'PAY')?.href ??
+      data?.payment_url ??
+      null;
     const pixQrCode = data?.pix?.qr_code ?? data?.qr_code ?? null;
     const pixCopyPaste = data?.pix?.copy_paste ?? data?.copy_paste ?? null;
     const expiresAt = data?.expiration_date ?? data?.expires_at ?? null;
@@ -124,36 +156,54 @@ export class PagBankService {
   async getCheckoutStatus(checkoutId: string) {
     this.ensureConfigured();
 
-    const response = await fetch(`${this.getApiUrl().replace(/\/$/, '')}/checkouts/${checkoutId}`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${this.getApiToken()}`,
-        Accept: 'application/json',
+    const response = await fetch(
+      `${this.getApiUrl().replace(/\/$/, '')}/checkouts/${checkoutId}`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${this.getApiToken()}`,
+          Accept: 'application/json',
+        },
       },
-    });
+    );
 
     if (!response.ok) {
       const detail = await response.text();
-      throw new ServiceUnavailableException(`PagBank checkout lookup failed: ${detail}`);
+      throw new ServiceUnavailableException(
+        `PagBank checkout lookup failed: ${detail}`,
+      );
     }
 
     return response.json();
   }
 
-  validateWebhookToken(headers: Record<string, any> | undefined, rawBody: unknown): boolean {
+  validateWebhookToken(
+    headers: Record<string, any> | undefined,
+    rawBody: unknown,
+  ): boolean {
     const webhookToken = this.getWebhookToken();
     if (!webhookToken) {
       return false;
     }
 
-    const authenticityHeader = headers?.['x-authenticity-token'] ?? headers?.['x-authenticityToken'];
+    const authenticityHeader =
+      headers?.['x-authenticity-token'] ?? headers?.['x-authenticityToken'];
     if (!authenticityHeader) {
       return false;
     }
 
-    const rawPayload = typeof rawBody === 'string' ? rawBody : Buffer.isBuffer(rawBody) ? rawBody.toString('utf8') : JSON.stringify(rawBody ?? {});
-    const expectedHash = createHash('sha256').update(`${webhookToken}-${rawPayload}`).digest('hex');
-    const providedHash = Array.isArray(authenticityHeader) ? String(authenticityHeader[0]).trim() : String(authenticityHeader).trim();
+    const rawPayload =
+      typeof rawBody === 'string'
+        ? rawBody
+        : Buffer.isBuffer(rawBody)
+          ? rawBody.toString('utf8')
+          : JSON.stringify(rawBody ?? {});
+    const expectedHash = createHash('sha256')
+      .update(`${webhookToken}-${rawPayload}`)
+      .digest('hex');
+    const providedHash = Array.isArray(authenticityHeader)
+      ? String(authenticityHeader[0]).trim()
+      : String(authenticityHeader).trim();
 
     if (providedHash.length !== 64) {
       return false;

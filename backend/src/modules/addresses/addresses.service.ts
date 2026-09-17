@@ -36,7 +36,9 @@ export class AddressesService {
 
   async create(userId: string, data: CreateAddressDto) {
     const type = data.type ?? AddressType.SHIPPING;
-    const existingCount = await this.prisma.address.count({ where: { userId, type } });
+    const existingCount = await this.prisma.address.count({
+      where: { userId, type },
+    });
     const setAsDefault = data.isDefault === true || existingCount === 0;
     const zipcode = this.normalizeZipcode(data.zipcode);
     const state = this.normalizeState(data.state);
@@ -92,7 +94,9 @@ export class AddressesService {
   }
 
   async update(userId: string, id: string, data: UpdateAddressDto) {
-    const current = await this.prisma.address.findFirst({ where: { id, userId } });
+    const current = await this.prisma.address.findFirst({
+      where: { id, userId },
+    });
     if (!current) {
       throw new NotFoundException('Address not found');
     }
@@ -100,18 +104,22 @@ export class AddressesService {
     const newType = data.type ?? current.type;
     const requiresDefaultUpdate =
       data.isDefault === true ||
-      (current.isDefault && data.type !== undefined && data.type !== current.type);
+      (current.isDefault &&
+        data.type !== undefined &&
+        data.type !== current.type);
 
     const updateData: any = {};
     if (data.nickname !== undefined) updateData.nickname = data.nickname;
     if (data.recipient !== undefined) updateData.recipient = data.recipient;
-    if (data.zipcode !== undefined) updateData.zipcode = this.normalizeZipcode(data.zipcode);
+    if (data.zipcode !== undefined)
+      updateData.zipcode = this.normalizeZipcode(data.zipcode);
     if (data.street !== undefined) updateData.street = data.street;
     if (data.number !== undefined) updateData.number = data.number;
     if (data.complement !== undefined) updateData.complement = data.complement;
     if (data.district !== undefined) updateData.district = data.district;
     if (data.city !== undefined) updateData.city = data.city;
-    if (data.state !== undefined) updateData.state = this.normalizeState(data.state);
+    if (data.state !== undefined)
+      updateData.state = this.normalizeState(data.state);
     if (data.reference !== undefined) updateData.reference = data.reference;
     if (data.type !== undefined) updateData.type = data.type;
     if (data.isDefault !== undefined) updateData.isDefault = data.isDefault;
@@ -144,7 +152,9 @@ export class AddressesService {
   }
 
   async remove(userId: string, id: string) {
-    const address = await this.prisma.address.findFirst({ where: { id, userId } });
+    const address = await this.prisma.address.findFirst({
+      where: { id, userId },
+    });
     if (!address) {
       throw new NotFoundException('Address not found');
     }
@@ -176,7 +186,9 @@ export class AddressesService {
   }
 
   async setDefault(userId: string, id: string) {
-    const address = await this.prisma.address.findFirst({ where: { id, userId } });
+    const address = await this.prisma.address.findFirst({
+      where: { id, userId },
+    });
     if (!address) {
       throw new NotFoundException('Address not found');
     }

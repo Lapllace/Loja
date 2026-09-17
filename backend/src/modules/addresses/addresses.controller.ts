@@ -35,7 +35,13 @@ export class AddressesController {
   @UseGuards(JwtAuthGuard)
   async create(
     @Req() req: any,
-    @Body(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }))
+    @Body(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      }),
+    )
     body: CreateAddressDto,
   ) {
     return this.addressesService.create(req.user.id, body);
@@ -52,7 +58,13 @@ export class AddressesController {
   async update(
     @Req() req: any,
     @Param('id') id: string,
-    @Body(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }))
+    @Body(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      }),
+    )
     body: UpdateAddressDto,
   ) {
     return this.addressesService.update(req.user.id, id, body);

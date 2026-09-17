@@ -1,4 +1,11 @@
-import { Injectable, ServiceUnavailableException, Logger, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  ServiceUnavailableException,
+  Logger,
+  BadRequestException,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DeliveryStatus } from '@prisma/client';
 
@@ -234,9 +241,12 @@ export class NinetyNineService {
   constructor(private readonly config: ConfigService) {}
 
   private getApiUrl(): string {
-    const environment = this.config.get<string>('NINENINE_ENVIRONMENT', 'sandbox');
-    return environment === 'production' 
-      ? 'https://delivery.99minutos.com' 
+    const environment = this.config.get<string>(
+      'NINENINE_ENVIRONMENT',
+      'sandbox',
+    );
+    return environment === 'production'
+      ? 'https://delivery.99minutos.com'
       : 'https://sandbox.99minutos.com';
   }
 
@@ -254,7 +264,9 @@ export class NinetyNineService {
 
   private ensureConfigured(): void {
     if (!this.getClientId() || !this.getClientSecret()) {
-      throw new ServiceUnavailableException('99Entrega credentials are not configured. Integration is ready but disabled until official credentials are provided.');
+      throw new ServiceUnavailableException(
+        '99Entrega credentials are not configured. Integration is ready but disabled until official credentials are provided.',
+      );
     }
   }
 
@@ -283,7 +295,7 @@ export class NinetyNineService {
 
       const data: OAuthResponse = await response.json();
       const expiresIn = data.expires_in;
-      
+
       this.tokenCache = {
         token: data.access_token,
         expiresAt: new Date(Date.now() + (expiresIn - 60) * 1000), // Refresh 1 minute before expiry
@@ -292,22 +304,24 @@ export class NinetyNineService {
       return this.tokenCache.token;
     } catch (error) {
       this.logger.error('Failed to obtain 99minutos access token', error);
-      throw new ServiceUnavailableException('Failed to authenticate with 99minutos API');
+      throw new ServiceUnavailableException(
+        'Failed to authenticate with 99minutos API',
+      );
     }
   }
 
   private async makeAuthenticatedRequest<T>(
     url: string,
     method: 'GET' | 'POST' | 'DELETE' = 'GET',
-    data?: unknown
+    data?: unknown,
   ): Promise<T> {
     const token = await this.getAccessToken();
-    
+
     try {
       const response = await fetch(url, {
         method,
         headers: {
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: data ? JSON.stringify(data) : undefined,
@@ -319,23 +333,36 @@ export class NinetyNineService {
 
       return await response.json();
     } catch (error) {
-      this.logger.error(`99minutos API request failed: ${method} ${url}`, error);
+      this.logger.error(
+        `99minutos API request failed: ${method} ${url}`,
+        error,
+      );
       throw new ServiceUnavailableException('99minutos API request failed');
     }
   }
 
-  private calculatePackageDimensions(items: NinetyNineQuoteRequest['items']): { weight: number; length: number; width: number; height: number } {
+  private calculatePackageDimensions(items: NinetyNineQuoteRequest['items']): {
+    weight: number;
+    length: number;
+    width: number;
+    height: number;
+  } {
     if (items.length === 0) {
-      throw new BadRequestException('Cannot calculate package dimensions: no items provided');
+      throw new BadRequestException(
+        'Cannot calculate package dimensions: no items provided',
+      );
     }
 
     // Calculate total weight
-    const totalWeight = items.reduce((sum, item) => sum + (item.weight * item.quantity), 0);
+    const totalWeight = items.reduce(
+      (sum, item) => sum + item.weight * item.quantity,
+      0,
+    );
 
     // Use maximum dimensions across all items (conservative approach)
-    const maxLength = Math.max(...items.map(item => item.length));
-    const maxWidth = Math.max(...items.map(item => item.width));
-    const maxHeight = Math.max(...items.map(item => item.height));
+    const maxLength = Math.max(...items.map((item) => item.length));
+    const maxWidth = Math.max(...items.map((item) => item.width));
+    const maxHeight = Math.max(...items.map((item) => item.height));
 
     return {
       weight: totalWeight,
@@ -345,18 +372,23 @@ export class NinetyNineService {
     };
   }
 
-  private determinePackageSize(dimensions: { weight: number; length: number; width: number; height: number }): string {
+  private determinePackageSize(dimensions: {
+    weight: number;
+    length: number;
+    width: number;
+    height: number;
+  }): string {
     // 99minutos size categories: xs, s, m, l, xl
     // Based on documentation, determine size by volume (length * width * height in cm³)
     const volume = dimensions.length * dimensions.width * dimensions.height;
-    
+
     // Volume thresholds in cm³:
     // xs: < 1,000 cm³ (e.g., 10x10x10)
     // s: 1,000 - 4,999 cm³ (e.g., 15x15x15 = 3,375)
     // m: 5,000 - 14,999 cm³ (e.g., 25x25x25 = 15,625)
     // l: 15,000 - 29,999 cm³ (e.g., 30x30x30 = 27,000)
     // xl: >= 30,000 cm³ (e.g., 35x35x35 = 42,875)
-    
+
     if (volume < 1000) return 'xs';
     if (volume < 5000) return 's';
     if (volume < 15000) return 'm';
@@ -368,7 +400,10 @@ export class NinetyNineService {
     return value.toFixed(6);
   }
 
-  private mapNinetyNineStatusToDeliveryStatus(statusCode: string, statusName: string): DeliveryStatus {
+  mapStatusToDeliveryStatus(
+    statusCode: string,
+    statusName: string,
+  ): DeliveryStatus | null {
     const statusMap: Record<string, DeliveryStatus> = {
       '1001': DeliveryStatus.QUOTED, // DRAFT
       '1002': DeliveryStatus.REQUESTING, // CONFIRMED
@@ -390,20 +425,29 @@ export class NinetyNineService {
       '8004': DeliveryStatus.FAILED, // DAMAGED
     };
 
-    return statusMap[statusCode] || DeliveryStatus.FAILED;
+    return statusMap[statusCode] || null;
   }
 
-  async quoteDelivery(payload: NinetyNineQuoteRequest): Promise<NinetyNineQuoteResult> {
+  async quoteDelivery(
+    payload: NinetyNineQuoteRequest,
+  ): Promise<NinetyNineQuoteResult> {
     this.ensureConfigured();
 
     const { pickup, dropoff, items, vehicleType } = payload;
-    
+
     if (!pickup.address || !dropoff.address) {
       throw new BadRequestException('Invalid quote request: missing addresses');
     }
 
-    if (!pickup.address.lat || !pickup.address.lng || !dropoff.address.lat || !dropoff.address.lng) {
-      throw new BadRequestException('Invalid quote request: missing coordinates for 99minutos API. Addresses must be geocoded.');
+    if (
+      !pickup.address.lat ||
+      !pickup.address.lng ||
+      !dropoff.address.lat ||
+      !dropoff.address.lng
+    ) {
+      throw new BadRequestException(
+        'Invalid quote request: missing coordinates for 99minutos API. Addresses must be geocoded.',
+      );
     }
 
     if (!items || items.length === 0) {
@@ -413,7 +457,9 @@ export class NinetyNineService {
     // Validate items have required dimensions
     for (const item of items) {
       if (!item.weight || !item.length || !item.width || !item.height) {
-        throw new BadRequestException('Invalid quote request: items must have weight, length, width, and height');
+        throw new BadRequestException(
+          'Invalid quote request: items must have weight, length, width, and height',
+        );
       }
     }
 
@@ -421,11 +467,12 @@ export class NinetyNineService {
       const packageDimensions = this.calculatePackageDimensions(items);
       const packageSize = this.determinePackageSize(packageDimensions);
 
-      const response: RatesResponse = await this.makeAuthenticatedRequest<RatesResponse>(
-        `${this.getApiUrl()}/api/v3/shipping/rates/coordinates/BRA/${this.formatCoordinate(pickup.address.lat)}/${this.formatCoordinate(pickup.address.lng)}/BRA/${this.formatCoordinate(dropoff.address.lat)}/${this.formatCoordinate(dropoff.address.lng)}`,
-        'GET',
-        null
-      );
+      const response: RatesResponse =
+        await this.makeAuthenticatedRequest<RatesResponse>(
+          `${this.getApiUrl()}/api/v3/shipping/rates/coordinates/BRA/${this.formatCoordinate(pickup.address.lat)}/${this.formatCoordinate(pickup.address.lng)}/BRA/${this.formatCoordinate(dropoff.address.lat)}/${this.formatCoordinate(dropoff.address.lng)}`,
+          'GET',
+          null,
+        );
 
       // Parse shipping cost from response - do not fallback to zero
       let shippingCost: number;
@@ -434,7 +481,9 @@ export class NinetyNineService {
       } else if (response.totalCost !== undefined) {
         shippingCost = response.totalCost;
       } else {
-        throw new ServiceUnavailableException('99minutos API did not return a valid shipping cost');
+        throw new ServiceUnavailableException(
+          '99minutos API did not return a valid shipping cost',
+        );
       }
 
       const result: NinetyNineQuoteResult = {
@@ -447,31 +496,43 @@ export class NinetyNineService {
       return result;
     } catch (error) {
       this.logger.error('99minutos quote request failed', error);
-      throw new ServiceUnavailableException('99minutos quote request failed. Ensure coordinates are valid and service is available for the route.');
+      throw new ServiceUnavailableException(
+        '99minutos quote request failed. Ensure coordinates are valid and service is available for the route.',
+      );
     }
   }
 
-  async createDelivery(payload: NinetyNineCreateDeliveryRequest): Promise<NinetyNineCreateDeliveryResult> {
+  async createDelivery(
+    payload: NinetyNineCreateDeliveryRequest,
+  ): Promise<NinetyNineCreateDeliveryResult> {
     this.ensureConfigured();
 
     const { deliveryId, storeSettings, order, items, vehicleType } = payload;
 
     if (!storeSettings.lat || !storeSettings.lng) {
-      throw new BadRequestException('Store settings must have latitude and longitude coordinates for 99minutos integration');
+      throw new BadRequestException(
+        'Store settings must have latitude and longitude coordinates for 99minutos integration',
+      );
     }
 
     if (!order.shippingLat || !order.shippingLng) {
-      throw new BadRequestException('Order shipping address must have latitude and longitude coordinates for 99minutos integration');
+      throw new BadRequestException(
+        'Order shipping address must have latitude and longitude coordinates for 99minutos integration',
+      );
     }
 
     if (!items || items.length === 0) {
-      throw new BadRequestException('Cannot create delivery: no items provided');
+      throw new BadRequestException(
+        'Cannot create delivery: no items provided',
+      );
     }
 
     // Validate items have required dimensions
     for (const item of items) {
       if (!item.weight || !item.length || !item.width || !item.height) {
-        throw new BadRequestException('Cannot create delivery: items must have weight, length, width, and height');
+        throw new BadRequestException(
+          'Cannot create delivery: items must have weight, length, width, and height',
+        );
       }
     }
 
@@ -489,22 +550,30 @@ export class NinetyNineService {
 
     const storePhone = storeSettings.phone;
     const storeEmail = storeSettings.email;
-    
+
     const recipientPhone = order.shippingPhone;
     const recipientEmail = order.shippingEmail;
 
     // Validate required fields
     if (!storePhone) {
-      throw new BadRequestException('Store settings must have a phone number for 99minutos integration');
+      throw new BadRequestException(
+        'Store settings must have a phone number for 99minutos integration',
+      );
     }
     if (!storeEmail) {
-      throw new BadRequestException('Store settings must have an email for 99minutos integration');
+      throw new BadRequestException(
+        'Store settings must have an email for 99minutos integration',
+      );
     }
     if (!recipientPhone) {
-      throw new BadRequestException('Customer must have a phone number for 99minutos integration');
+      throw new BadRequestException(
+        'Customer must have a phone number for 99minutos integration',
+      );
     }
     if (!recipientEmail) {
-      throw new BadRequestException('Customer must have an email for 99minutos integration');
+      throw new BadRequestException(
+        'Customer must have an email for 99minutos integration',
+      );
     }
 
     // Build address strings
@@ -548,7 +617,7 @@ export class NinetyNineService {
           items: [
             {
               size: packageSize,
-              description: items.map(item => item.description).join(', '),
+              description: items.map((item) => item.description).join(', '),
               weight: packageDimensions.weight,
               length: packageDimensions.length,
               width: packageDimensions.width,
@@ -561,15 +630,18 @@ export class NinetyNineService {
     };
 
     try {
-      const response: CreateOrderResponse = await this.makeAuthenticatedRequest<CreateOrderResponse>(
-        `${this.getApiUrl()}/api/v3/orders`,
-        'POST',
-        orderRequest
-      );
+      const response: CreateOrderResponse =
+        await this.makeAuthenticatedRequest<CreateOrderResponse>(
+          `${this.getApiUrl()}/api/v3/orders`,
+          'POST',
+          orderRequest,
+        );
 
       const shipment = response.shipments[0];
       if (!shipment || !shipment.trackingId) {
-        throw new ServiceUnavailableException('99minutos API did not return a valid tracking ID');
+        throw new ServiceUnavailableException(
+          '99minutos API did not return a valid tracking ID',
+        );
       }
 
       const result: NinetyNineCreateDeliveryResult = {
@@ -582,32 +654,48 @@ export class NinetyNineService {
     } catch (error) {
       // Only convert unknown errors to ServiceUnavailableException
       // Preserve domain errors (BadRequestException, etc.)
-      if (error instanceof BadRequestException || error instanceof NotFoundException || error instanceof ForbiddenException) {
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException
+      ) {
         throw error;
       }
       this.logger.error('99minutos create delivery request failed', error);
-      throw new ServiceUnavailableException('99minutos create delivery request failed');
+      throw new ServiceUnavailableException(
+        '99minutos create delivery request failed',
+      );
     }
   }
 
-  async getDeliveryStatus(externalDeliveryId: string): Promise<NinetyNineTrackingResult> {
+  async getDeliveryStatus(
+    externalDeliveryId: string,
+  ): Promise<NinetyNineTrackingResult> {
     this.ensureConfigured();
 
     try {
-      const response: TrackingResponse = await this.makeAuthenticatedRequest<TrackingResponse>(
-        `${this.getApiUrl()}/api/v3/shipments/tracking/${externalDeliveryId}`,
-        'GET',
-        null
-      );
+      const response: TrackingResponse =
+        await this.makeAuthenticatedRequest<TrackingResponse>(
+          `${this.getApiUrl()}/api/v3/shipments/tracking/${externalDeliveryId}`,
+          'GET',
+          null,
+        );
 
       const latestEvent = response.Events[response.Events.length - 1];
-      
+
       const timestamp = latestEvent?.CreatedAt ?? null;
-      const eventTime = timestamp && !Number.isNaN(Date.parse(timestamp)) ? new Date(timestamp) : null;
-      
+      const eventTime =
+        timestamp && !Number.isNaN(Date.parse(timestamp))
+          ? new Date(timestamp)
+          : null;
+
       const result: NinetyNineTrackingResult = {
         externalDeliveryId: response.TrackingId,
-        status: this.mapNinetyNineStatusToDeliveryStatus(response.StatusCode, response.StatusName),
+        status:
+          this.mapStatusToDeliveryStatus(
+            response.StatusCode,
+            response.StatusName,
+          ) ?? DeliveryStatus.FAILED,
         trackingCode: response.TrackingId,
         trackingUrl: null,
         courierName: latestEvent?.Data?.driverName || null,
@@ -620,28 +708,36 @@ export class NinetyNineService {
       return result;
     } catch (error) {
       this.logger.error('99minutos get delivery status request failed', error);
-      throw new ServiceUnavailableException('99minutos get delivery status request failed');
+      throw new ServiceUnavailableException(
+        '99minutos get delivery status request failed',
+      );
     }
   }
 
-  async cancelDelivery(externalDeliveryId: string): Promise<{ externalDeliveryId: string | null }> {
+  async cancelDelivery(
+    externalDeliveryId: string,
+  ): Promise<{ externalDeliveryId: string | null }> {
     this.ensureConfigured();
 
     try {
       await this.makeAuthenticatedRequest(
         `${this.getApiUrl()}/api/v3/shipments/${externalDeliveryId}`,
         'DELETE',
-        null
+        null,
       );
 
       return { externalDeliveryId };
     } catch (error) {
       this.logger.error('99minutos cancel delivery request failed', error);
-      throw new ServiceUnavailableException('99minutos cancel delivery request failed');
+      throw new ServiceUnavailableException(
+        '99minutos cancel delivery request failed',
+      );
     }
   }
 
-  normalizeWebhookPayload(rawPayload: unknown): NinetyNineWebhookNormalized | null {
+  normalizeWebhookPayload(
+    rawPayload: unknown,
+  ): NinetyNineWebhookNormalized | null {
     if (!rawPayload || typeof rawPayload !== 'object') {
       return null;
     }
@@ -651,7 +747,7 @@ export class NinetyNineService {
     const internalKey = payload.InternalKey || payload.internalKey;
     const statusCode = payload.StatusCode || payload.statusCode;
     const statusName = payload.StatusName || payload.statusName;
-    
+
     // Try to get event time from latest event or payload
     let eventTime: Date | null = null;
     const events = payload.Events as Array<{ CreatedAt?: string }> | undefined;
@@ -676,7 +772,10 @@ export class NinetyNineService {
     };
   }
 
-  validateWebhook(rawBody: string | Buffer, headers: Record<string, string | string[] | undefined> = {}): boolean {
+  validateWebhook(
+    rawBody: string | Buffer,
+    headers: Record<string, string | string[] | undefined> = {},
+  ): boolean {
     const secret = this.getWebhookSecret();
     if (!secret) {
       return false;
@@ -689,13 +788,23 @@ export class NinetyNineService {
       return false;
     }
 
-    const bodyText = Buffer.isBuffer(rawBody) ? rawBody.toString('utf8') : String(rawBody ?? '');
+    const bodyText = Buffer.isBuffer(rawBody)
+      ? rawBody.toString('utf8')
+      : String(rawBody ?? '');
     const crypto = require('crypto');
-    const expected = crypto.createHmac('sha256', secret).update(bodyText).digest('hex');
-    
+    const expected = crypto
+      .createHmac('sha256', secret)
+      .update(bodyText)
+      .digest('hex');
+
     try {
-      const providedString = Array.isArray(provided) ? provided[0] : String(provided);
-      return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(providedString.trim()));
+      const providedString = Array.isArray(provided)
+        ? provided[0]
+        : String(provided);
+      return crypto.timingSafeEqual(
+        Buffer.from(expected),
+        Buffer.from(providedString.trim()),
+      );
     } catch (error) {
       return false;
     }

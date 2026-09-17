@@ -18,7 +18,10 @@ import { QuoteDeliveryDto } from './dto/quote-delivery.dto';
 import { CreateDeliveryDto } from './dto/create-delivery.dto';
 import { UpdateDeliveryDto } from './dto/update-delivery.dto';
 import { UberDirectService } from './providers/uber-direct.service';
-import { NinetyNineService, DeliveryProviderResult } from './providers/ninety-nine.service';
+import {
+  NinetyNineService,
+  DeliveryProviderResult,
+} from './providers/ninety-nine.service';
 
 export interface DeliveryAddress {
   recipient: string;
@@ -58,17 +61,19 @@ export class DeliveryService {
     private readonly ninetyNineService: NinetyNineService,
   ) {}
 
-  private normalizeAddress(address: {
-    recipient?: string | null;
-    zipcode?: string | null;
-    street?: string | null;
-    number?: string | null;
-    complement?: string | null;
-    district?: string | null;
-    city?: string | null;
-    state?: string | null;
-    reference?: string | null;
-  } | null): DeliveryAddress | null {
+  private normalizeAddress(
+    address: {
+      recipient?: string | null;
+      zipcode?: string | null;
+      street?: string | null;
+      number?: string | null;
+      complement?: string | null;
+      district?: string | null;
+      city?: string | null;
+      state?: string | null;
+      reference?: string | null;
+    } | null,
+  ): DeliveryAddress | null {
     if (!address) {
       return null;
     }
@@ -90,11 +95,23 @@ export class DeliveryService {
     const storeSettings = await this.prisma.storeSettings.findFirst();
 
     if (!storeSettings) {
-      throw new BadRequestException('Store settings are not configured. Pickup address is not available.');
+      throw new BadRequestException(
+        'Store settings are not configured. Pickup address is not available.',
+      );
     }
 
-    if (!storeSettings.name || !storeSettings.zipcode || !storeSettings.street || !storeSettings.number || !storeSettings.district || !storeSettings.city || !storeSettings.state) {
-      throw new BadRequestException('Store settings are incomplete. Required fields: name, zipcode, street, number, district, city, state');
+    if (
+      !storeSettings.name ||
+      !storeSettings.zipcode ||
+      !storeSettings.street ||
+      !storeSettings.number ||
+      !storeSettings.district ||
+      !storeSettings.city ||
+      !storeSettings.state
+    ) {
+      throw new BadRequestException(
+        'Store settings are incomplete. Required fields: name, zipcode, street, number, district, city, state',
+      );
     }
 
     return {
@@ -159,21 +176,66 @@ export class DeliveryService {
   }
 
   private ensureMethodAllowed(method: DeliveryMethod) {
-    if (![DeliveryMethod.PICKUP, DeliveryMethod.UBER, DeliveryMethod.NINENINE, DeliveryMethod.MANUAL].includes(method)) {
+    if (
+      ![
+        DeliveryMethod.PICKUP,
+        DeliveryMethod.UBER,
+        DeliveryMethod.NINENINE,
+        DeliveryMethod.MANUAL,
+      ].includes(method)
+    ) {
       throw new BadRequestException('Unsupported delivery method');
     }
   }
 
-  private ensureStatusTransition(current: DeliveryStatus, next: DeliveryStatus) {
+  private ensureStatusTransition(
+    current: DeliveryStatus,
+    next: DeliveryStatus,
+  ) {
     const validTransitions: Record<DeliveryStatus, DeliveryStatus[]> = {
-      PENDING: [DeliveryStatus.QUOTED, DeliveryStatus.REQUESTING, DeliveryStatus.READY_FOR_PICKUP],
-      QUOTED: [DeliveryStatus.REQUESTING, DeliveryStatus.CANCELLED, DeliveryStatus.FAILED],
-      REQUESTING: [DeliveryStatus.SEARCHING_DRIVER, DeliveryStatus.DRIVER_ASSIGNED, DeliveryStatus.CANCELLED, DeliveryStatus.FAILED],
-      SEARCHING_DRIVER: [DeliveryStatus.DRIVER_ASSIGNED, DeliveryStatus.FAILED, DeliveryStatus.CANCELLED],
-      DRIVER_ASSIGNED: [DeliveryStatus.PICKED_UP, DeliveryStatus.IN_TRANSIT, DeliveryStatus.FAILED, DeliveryStatus.CANCELLED],
-      READY_FOR_PICKUP: [DeliveryStatus.DELIVERED, DeliveryStatus.CANCELLED, DeliveryStatus.FAILED],
-      PICKED_UP: [DeliveryStatus.IN_TRANSIT, DeliveryStatus.DELIVERED, DeliveryStatus.FAILED, DeliveryStatus.CANCELLED],
-      IN_TRANSIT: [DeliveryStatus.DELIVERED, DeliveryStatus.FAILED, DeliveryStatus.CANCELLED],
+      PENDING: [
+        DeliveryStatus.QUOTED,
+        DeliveryStatus.REQUESTING,
+        DeliveryStatus.READY_FOR_PICKUP,
+      ],
+      QUOTED: [
+        DeliveryStatus.REQUESTING,
+        DeliveryStatus.CANCELLED,
+        DeliveryStatus.FAILED,
+      ],
+      REQUESTING: [
+        DeliveryStatus.SEARCHING_DRIVER,
+        DeliveryStatus.DRIVER_ASSIGNED,
+        DeliveryStatus.CANCELLED,
+        DeliveryStatus.FAILED,
+      ],
+      SEARCHING_DRIVER: [
+        DeliveryStatus.DRIVER_ASSIGNED,
+        DeliveryStatus.FAILED,
+        DeliveryStatus.CANCELLED,
+      ],
+      DRIVER_ASSIGNED: [
+        DeliveryStatus.PICKED_UP,
+        DeliveryStatus.IN_TRANSIT,
+        DeliveryStatus.FAILED,
+        DeliveryStatus.CANCELLED,
+      ],
+      READY_FOR_PICKUP: [
+        DeliveryStatus.DELIVERED,
+        DeliveryStatus.CANCELLED,
+        DeliveryStatus.FAILED,
+      ],
+      PICKED_UP: [
+        DeliveryStatus.IN_TRANSIT,
+        DeliveryStatus.DELIVERED,
+        DeliveryStatus.FAILED,
+        DeliveryStatus.CANCELLED,
+      ],
+      IN_TRANSIT: [
+        DeliveryStatus.DELIVERED,
+        DeliveryStatus.FAILED,
+        DeliveryStatus.CANCELLED,
+      ],
       DELIVERED: [],
       FAILED: [],
       CANCELLED: [],
@@ -181,7 +243,9 @@ export class DeliveryService {
 
     const allowed = validTransitions[current] ?? [];
     if (!allowed.includes(next)) {
-      throw new BadRequestException(`Invalid delivery status transition from ${current} to ${next}`);
+      throw new BadRequestException(
+        `Invalid delivery status transition from ${current} to ${next}`,
+      );
     }
   }
 
@@ -202,7 +266,10 @@ export class DeliveryService {
     return order;
   }
 
-  async quote(user: DeliveryUser, data: QuoteDeliveryDto): Promise<DeliveryQuoteResponse> {
+  async quote(
+    user: DeliveryUser,
+    data: QuoteDeliveryDto,
+  ): Promise<DeliveryQuoteResponse> {
     if (user.role !== UserRole.CUSTOMER) {
       throw new ForbiddenException('Only customers can quote delivery');
     }
@@ -274,7 +341,9 @@ export class DeliveryService {
 
       // Validate store coordinates are available
       if (!storeSettings.latitude || !storeSettings.longitude) {
-        throw new BadRequestException('Store settings must have latitude and longitude coordinates for 99minutos integration');
+        throw new BadRequestException(
+          'Store settings must have latitude and longitude coordinates for 99minutos integration',
+        );
       }
 
       // For quote, we need items data - use cart if orderId provided, otherwise return error
@@ -295,7 +364,7 @@ export class DeliveryService {
         });
 
         if (order && order.items) {
-          items = order.items.map(item => ({
+          items = order.items.map((item) => ({
             description: item.productName,
             weight: item.product.weight || 0,
             length: item.product.length || 0,
@@ -307,12 +376,16 @@ export class DeliveryService {
       }
 
       if (items.length === 0) {
-        throw new BadRequestException('Quote requires order with items to calculate shipping cost');
+        throw new BadRequestException(
+          'Quote requires order with items to calculate shipping cost',
+        );
       }
 
       // Check if customer address has coordinates (they don't in current schema)
       // For now, throw error since we can't geocode without integration
-      throw new BadRequestException('99minutos integration requires geocoding. Customer addresses must have latitude and longitude coordinates, which is not currently supported. Please use PICKUP or MANUAL delivery methods instead.');
+      throw new BadRequestException(
+        '99minutos integration requires geocoding. Customer addresses must have latitude and longitude coordinates, which is not currently supported. Please use PICKUP or MANUAL delivery methods instead.',
+      );
     }
 
     throw new BadRequestException('Unsupported delivery method');
@@ -320,7 +393,9 @@ export class DeliveryService {
 
   async create(user: DeliveryUser, data: CreateDeliveryDto) {
     if (user.role === UserRole.CUSTOMER) {
-      throw new ForbiddenException('Customers cannot create delivery records directly. The backend must manage the delivery flow.');
+      throw new ForbiddenException(
+        'Customers cannot create delivery records directly. The backend must manage the delivery flow.',
+      );
     }
 
     if (user.role !== UserRole.ADMIN && user.role !== UserRole.OWNER) {
@@ -328,13 +403,19 @@ export class DeliveryService {
     }
 
     const order = await this.getOrderForDelivery(data.orderId, user);
-    const payment = await this.prisma.payment.findUnique({ where: { orderId: order.id } });
+    const payment = await this.prisma.payment.findUnique({
+      where: { orderId: order.id },
+    });
 
     if (!payment || payment.status !== PaymentStatus.PAID) {
-      throw new BadRequestException('Delivery can only be created after payment is confirmed.');
+      throw new BadRequestException(
+        'Delivery can only be created after payment is confirmed.',
+      );
     }
 
-    const existing = await this.prisma.delivery.findUnique({ where: { orderId: data.orderId } });
+    const existing = await this.prisma.delivery.findUnique({
+      where: { orderId: data.orderId },
+    });
     if (existing) {
       return existing;
     }
@@ -365,8 +446,14 @@ export class DeliveryService {
       });
     }
 
-    if (data.method === DeliveryMethod.UBER || data.method === DeliveryMethod.NINENINE) {
-      const provider = data.method === DeliveryMethod.UBER ? DeliveryProvider.UBER : DeliveryProvider.NINENINE;
+    if (
+      data.method === DeliveryMethod.UBER ||
+      data.method === DeliveryMethod.NINENINE
+    ) {
+      const provider =
+        data.method === DeliveryMethod.UBER
+          ? DeliveryProvider.UBER
+          : DeliveryProvider.NINENINE;
 
       return this.prisma.delivery.create({
         data: {
@@ -384,12 +471,18 @@ export class DeliveryService {
 
   async authorize(user: DeliveryUser, id: string) {
     if (user.role !== UserRole.ADMIN && user.role !== UserRole.OWNER) {
-      throw new ForbiddenException('Only ADMIN or OWNER can authorize a delivery');
+      throw new ForbiddenException(
+        'Only ADMIN or OWNER can authorize a delivery',
+      );
     }
 
     const delivery = await this.prisma.delivery.findUnique({
       where: { id },
-      include: { order: { include: { payment: true, items: { include: { product: true } } } } },
+      include: {
+        order: {
+          include: { payment: true, items: { include: { product: true } } },
+        },
+      },
     });
 
     if (!delivery) {
@@ -397,11 +490,15 @@ export class DeliveryService {
     }
 
     if (!delivery.order || !delivery.order.payment) {
-      throw new BadRequestException('Order payment is required before authorization');
+      throw new BadRequestException(
+        'Order payment is required before authorization',
+      );
     }
 
     if (delivery.order.payment.status !== PaymentStatus.PAID) {
-      throw new BadRequestException('Payment must be confirmed before authorization');
+      throw new BadRequestException(
+        'Payment must be confirmed before authorization',
+      );
     }
 
     if (delivery.status !== DeliveryStatus.QUOTED) {
@@ -417,8 +514,13 @@ export class DeliveryService {
       DeliveryStatus.DELIVERED,
     ];
 
-    if (delivery.externalDeliveryId || activeStatuses.includes(delivery.status)) {
-      throw new BadRequestException('Delivery was already requested to the provider or already in progress.');
+    if (
+      delivery.externalDeliveryId ||
+      activeStatuses.includes(delivery.status)
+    ) {
+      throw new BadRequestException(
+        'Delivery was already requested to the provider or already in progress.',
+      );
     }
 
     if (delivery.method === DeliveryMethod.UBER) {
@@ -429,7 +531,9 @@ export class DeliveryService {
         });
 
         if (!providerResult.externalDeliveryId) {
-          throw new BadRequestException('Uber did not return a valid external delivery ID.');
+          throw new BadRequestException(
+            'Uber did not return a valid external delivery ID.',
+          );
         }
 
         const updated = await this.prisma.delivery.update({
@@ -439,7 +543,8 @@ export class DeliveryService {
             externalDeliveryId: providerResult.externalDeliveryId,
             quoteId: providerResult.quoteId ?? delivery.quoteId,
             shippingCost: providerResult.shippingCost ?? delivery.shippingCost,
-            estimatedDelivery: providerResult.estimatedDelivery ?? delivery.estimatedDelivery,
+            estimatedDelivery:
+              providerResult.estimatedDelivery ?? delivery.estimatedDelivery,
             requestedAt: new Date(),
           },
         });
@@ -452,7 +557,9 @@ export class DeliveryService {
         };
       } catch (error) {
         if (error instanceof ServiceUnavailableException) {
-          throw new BadRequestException('Uber Direct is not configured. Authorization is disabled until credentials are available.');
+          throw new BadRequestException(
+            'Uber Direct is not configured. Authorization is disabled until credentials are available.',
+          );
         }
         throw error;
       }
@@ -467,21 +574,29 @@ export class DeliveryService {
 
         // 99minutos requires coordinates but our Address model doesn't have them
         // For now, disable 99minutos integration until geocoding is implemented
-        throw new BadRequestException('99minutos integration is currently disabled because the Address model does not support latitude/longitude coordinates. Please use PICKUP or MANUAL delivery methods instead, or implement geocoding to obtain address coordinates.');
+        throw new BadRequestException(
+          '99minutos integration is currently disabled because the Address model does not support latitude/longitude coordinates. Please use PICKUP or MANUAL delivery methods instead, or implement geocoding to obtain address coordinates.',
+        );
       } catch (error) {
         if (error instanceof ServiceUnavailableException) {
-          throw new BadRequestException('99Entrega is not configured. Authorization is disabled until credentials are available.');
+          throw new BadRequestException(
+            '99Entrega is not configured. Authorization is disabled until credentials are available.',
+          );
         }
         throw error;
       }
     }
 
-    throw new BadRequestException('Only Uber and 99 deliveries can be authorized externally');
+    throw new BadRequestException(
+      'Only Uber and 99 deliveries can be authorized externally',
+    );
   }
 
   async getPendingAuthorization(user: DeliveryUser) {
     if (user.role !== UserRole.ADMIN && user.role !== UserRole.OWNER) {
-      throw new ForbiddenException('Only ADMIN or OWNER can view pending deliveries');
+      throw new ForbiddenException(
+        'Only ADMIN or OWNER can view pending deliveries',
+      );
     }
 
     const deliveries = await this.prisma.delivery.findMany({
@@ -498,12 +613,17 @@ export class DeliveryService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return deliveries.map((delivery) => this.buildPendingAuthorizationPayload(delivery));
+    return deliveries.map((delivery) =>
+      this.buildPendingAuthorizationPayload(delivery),
+    );
   }
 
   async findAll(user: DeliveryUser) {
     const deliveries = await this.prisma.delivery.findMany({
-      where: user.role === UserRole.CUSTOMER ? { order: { userId: user.id } } : undefined,
+      where:
+        user.role === UserRole.CUSTOMER
+          ? { order: { userId: user.id } }
+          : undefined,
       include: { order: true },
       orderBy: { createdAt: 'desc' },
     });
@@ -527,7 +647,13 @@ export class DeliveryService {
       deliveredAt: delivery.deliveredAt,
       createdAt: delivery.createdAt,
       updatedAt: delivery.updatedAt,
-      order: delivery.order ? { id: delivery.order.id, number: delivery.order.number, userId: delivery.order.userId } : null,
+      order: delivery.order
+        ? {
+            id: delivery.order.id,
+            number: delivery.order.number,
+            userId: delivery.order.userId,
+          }
+        : null,
     }));
   }
 
@@ -569,7 +695,9 @@ export class DeliveryService {
 
   async update(user: DeliveryUser, id: string, data: UpdateDeliveryDto) {
     if (user.role !== UserRole.ADMIN && user.role !== UserRole.OWNER) {
-      throw new ForbiddenException('Only ADMIN or OWNER can update delivery status');
+      throw new ForbiddenException(
+        'Only ADMIN or OWNER can update delivery status',
+      );
     }
 
     const delivery = await this.prisma.delivery.findUnique({ where: { id } });
@@ -590,11 +718,16 @@ export class DeliveryService {
     } = {};
 
     if (data.status !== undefined) updateData.status = data.status;
-    if (data.courierName !== undefined) updateData.courierName = data.courierName;
-    if (data.courierPhone !== undefined) updateData.courierPhone = data.courierPhone;
-    if (data.trackingCode !== undefined) updateData.trackingCode = data.trackingCode;
-    if (data.trackingUrl !== undefined) updateData.trackingUrl = data.trackingUrl;
-    if (data.estimatedDelivery !== undefined) updateData.estimatedDelivery = new Date(data.estimatedDelivery);
+    if (data.courierName !== undefined)
+      updateData.courierName = data.courierName;
+    if (data.courierPhone !== undefined)
+      updateData.courierPhone = data.courierPhone;
+    if (data.trackingCode !== undefined)
+      updateData.trackingCode = data.trackingCode;
+    if (data.trackingUrl !== undefined)
+      updateData.trackingUrl = data.trackingUrl;
+    if (data.estimatedDelivery !== undefined)
+      updateData.estimatedDelivery = new Date(data.estimatedDelivery);
 
     return this.prisma.delivery.update({ where: { id }, data: updateData });
   }
@@ -602,38 +735,214 @@ export class DeliveryService {
   async remove(user: DeliveryUser, id: string) {
     void user;
     void id;
-    throw new ForbiddenException('Deliveries are historical records and cannot be deleted.');
+    throw new ForbiddenException(
+      'Deliveries are historical records and cannot be deleted.',
+    );
   }
 
-  async handleUberWebhook(rawBody: unknown, headers: Record<string, string | string[] | undefined> = {}) {
-    const text = Buffer.isBuffer(rawBody) ? rawBody.toString('utf8') : typeof rawBody === 'string' ? rawBody : JSON.stringify(rawBody ?? {});
+  private parseWebhookBody(
+    rawBody: unknown,
+    text: string,
+  ): Record<string, unknown> {
+    if (rawBody && typeof rawBody === 'object' && !Buffer.isBuffer(rawBody)) {
+      return rawBody as Record<string, unknown>;
+    }
+
+    try {
+      const parsed: unknown = text ? JSON.parse(text) : {};
+      if (!parsed || typeof parsed !== 'object') {
+        throw new BadRequestException('Invalid webhook payload');
+      }
+      return parsed as Record<string, unknown>;
+    } catch {
+      throw new BadRequestException('Invalid webhook payload');
+    }
+  }
+
+  private getUberWebhookPayload(rawBody: unknown, text: string) {
+    const payload = this.parseWebhookBody(rawBody, text);
+
+    const deliveryId =
+      payload.delivery_id ??
+      payload.deliveryId ??
+      payload.external_delivery_id ??
+      payload.externalDeliveryId;
+    const eventId = payload.event_id ?? payload.eventId ?? payload.id;
+    const status =
+      (payload.meta as { status?: string } | undefined)?.status ??
+      payload.status;
+
+    return {
+      payload,
+      deliveryId: deliveryId ? String(deliveryId) : null,
+      eventId: eventId ? String(eventId) : null,
+      status: status ? String(status) : null,
+    };
+  }
+
+  private mapUberStatusToDeliveryStatus(status: string): DeliveryStatus | null {
+    const normalized = status.toUpperCase();
+
+    if (normalized.includes('CANCEL')) return DeliveryStatus.CANCELLED;
+    if (
+      normalized.includes('FAIL') ||
+      normalized.includes('RETURN') ||
+      normalized.includes('DAMAG')
+    ) {
+      return DeliveryStatus.FAILED;
+    }
+    if (normalized.includes('DELIVER')) return DeliveryStatus.DELIVERED;
+    if (normalized.includes('PICK') || normalized.includes('PICKUP'))
+      return DeliveryStatus.PICKED_UP;
+    if (
+      normalized.includes('TRANSIT') ||
+      normalized.includes('EN_ROUTE') ||
+      normalized.includes('ON_THE_WAY')
+    ) {
+      return DeliveryStatus.IN_TRANSIT;
+    }
+    if (
+      normalized.includes('COURIER') ||
+      normalized.includes('DRIVER') ||
+      normalized.includes('ASSIGN')
+    ) {
+      return DeliveryStatus.DRIVER_ASSIGNED;
+    }
+    if (normalized.includes('SEARCH')) return DeliveryStatus.SEARCHING_DRIVER;
+    if (
+      normalized.includes('PENDING') ||
+      normalized.includes('REQUEST') ||
+      normalized.includes('CREATED')
+    ) {
+      return DeliveryStatus.REQUESTING;
+    }
+
+    return null;
+  }
+
+  async handleUberWebhook(
+    rawBody: unknown,
+    headers: Record<string, string | string[] | undefined> = {},
+  ) {
+    const text = Buffer.isBuffer(rawBody)
+      ? rawBody.toString('utf8')
+      : typeof rawBody === 'string'
+        ? rawBody
+        : JSON.stringify(rawBody ?? {});
 
     if (!this.uberDirectService.validateWebhook(text, headers)) {
       throw new ForbiddenException('Invalid Uber webhook signature');
     }
 
-    const payload = typeof rawBody === 'string' ? JSON.parse(rawBody) : rawBody;
-    const eventId = payload && typeof payload === 'object' ? (payload as { event_id?: string; eventId?: string; id?: string }).event_id ?? (payload as { event_id?: string; eventId?: string; id?: string }).eventId ?? (payload as { event_id?: string; eventId?: string; id?: string }).id : undefined;
-    const status = payload && typeof payload === 'object' ? (payload as { meta?: { status?: string }; status?: string }).meta?.status ?? (payload as { meta?: { status?: string }; status?: string }).status : undefined;
+    const { deliveryId, eventId, status } = this.getUberWebhookPayload(
+      rawBody,
+      text,
+    );
 
     if (!eventId || !status) {
       throw new BadRequestException('Invalid Uber webhook payload');
     }
 
-    return { ok: true, provider: 'UBER', eventId, status };
+    if (!deliveryId) {
+      this.logger.warn(
+        `Uber webhook received without a delivery identifier (event ${eventId})`,
+      );
+      return {
+        ok: true,
+        provider: 'UBER',
+        eventId,
+        status,
+        message: 'Delivery identifier missing',
+      };
+    }
+
+    const delivery = await this.prisma.delivery.findFirst({
+      where: {
+        externalDeliveryId: deliveryId,
+        provider: DeliveryProvider.UBER,
+      },
+    });
+
+    if (!delivery) {
+      this.logger.warn(
+        `Uber webhook received for unknown delivery: ${deliveryId}`,
+      );
+      return {
+        ok: true,
+        provider: 'UBER',
+        eventId,
+        deliveryId,
+        status,
+        message: 'Delivery not found',
+      };
+    }
+
+    const newStatus = this.mapUberStatusToDeliveryStatus(status);
+
+    if (!newStatus) {
+      this.logger.warn(
+        `Uber webhook received with unmapped status: ${status} (event ${eventId})`,
+      );
+      return {
+        ok: true,
+        provider: 'UBER',
+        eventId,
+        deliveryId,
+        status,
+        message: 'Unmapped status',
+      };
+    }
+
+    if (this.shouldRejectStatusRegression(delivery.status, newStatus)) {
+      this.logger.warn(
+        `Uber webhook rejected status regression: ${delivery.status} -> ${newStatus}`,
+      );
+      return {
+        ok: true,
+        provider: 'UBER',
+        eventId,
+        deliveryId,
+        status: delivery.status,
+        message: 'Status regression rejected',
+      };
+    }
+
+    if (newStatus !== delivery.status) {
+      this.ensureStatusTransition(delivery.status, newStatus);
+
+      await this.prisma.delivery.update({
+        where: { id: delivery.id },
+        data: { status: newStatus },
+      });
+    }
+
+    return {
+      ok: true,
+      provider: 'UBER',
+      eventId,
+      deliveryId,
+      status: newStatus,
+    };
   }
 
-  async handleNinetyNineWebhook(rawBody: unknown, headers: Record<string, string | string[] | undefined> = {}) {
-    const text = Buffer.isBuffer(rawBody) ? rawBody.toString('utf8') : typeof rawBody === 'string' ? rawBody : JSON.stringify(rawBody ?? {});
+  async handleNinetyNineWebhook(
+    rawBody: unknown,
+    headers: Record<string, string | string[] | undefined> = {},
+  ) {
+    const text = Buffer.isBuffer(rawBody)
+      ? rawBody.toString('utf8')
+      : typeof rawBody === 'string'
+        ? rawBody
+        : JSON.stringify(rawBody ?? {});
 
     if (!this.ninetyNineService.validateWebhook(text, headers)) {
       throw new ForbiddenException('Invalid 99 webhook signature');
     }
 
-    const payload = typeof rawBody === 'string' ? JSON.parse(rawBody) : rawBody;
-    
+    const payload = this.parseWebhookBody(rawBody, text);
+
     const normalized = this.ninetyNineService.normalizeWebhookPayload(payload);
-    
+
     if (!normalized) {
       throw new BadRequestException('Invalid 99 webhook payload');
     }
@@ -649,27 +958,52 @@ export class DeliveryService {
     });
 
     if (!delivery) {
-      this.logger.warn(`99 webhook received for unknown delivery: ${trackingId}`);
-      return { ok: true, provider: 'NINENINE', trackingId, message: 'Delivery not found' };
+      this.logger.warn(
+        `99 webhook received for unknown delivery: ${trackingId}`,
+      );
+      return {
+        ok: true,
+        provider: 'NINENINE',
+        trackingId,
+        message: 'Delivery not found',
+      };
     }
 
-    const newStatus = this.mapNinetyNineStatusToDeliveryStatus(statusCode, statusName);
-    
+    const newStatus = this.mapNinetyNineStatusToDeliveryStatus(
+      statusCode,
+      statusName,
+    );
+
     if (!newStatus) {
-      this.logger.warn(`99 webhook received with unmapped status: ${statusCode} (${statusName})`);
-      return { ok: true, provider: 'NINENINE', trackingId, status: delivery.status };
+      this.logger.warn(
+        `99 webhook received with unmapped status: ${statusCode} (${statusName})`,
+      );
+      return {
+        ok: true,
+        provider: 'NINENINE',
+        trackingId,
+        status: delivery.status,
+      };
     }
 
     // Prevent status regression
     if (this.shouldRejectStatusRegression(delivery.status, newStatus)) {
-      this.logger.warn(`99 webhook rejected status regression: ${delivery.status} -> ${newStatus}`);
-      return { ok: true, provider: 'NINENINE', trackingId, status: delivery.status, message: 'Status regression rejected' };
+      this.logger.warn(
+        `99 webhook rejected status regression: ${delivery.status} -> ${newStatus}`,
+      );
+      return {
+        ok: true,
+        provider: 'NINENINE',
+        trackingId,
+        status: delivery.status,
+        message: 'Status regression rejected',
+      };
     }
 
     // Only update if status is different
     if (newStatus !== delivery.status) {
       this.ensureStatusTransition(delivery.status, newStatus);
-      
+
       await this.prisma.delivery.update({
         where: { id: delivery.id },
         data: {
@@ -681,7 +1015,10 @@ export class DeliveryService {
     return { ok: true, provider: 'NINENINE', trackingId, status: newStatus };
   }
 
-  private shouldRejectStatusRegression(currentStatus: DeliveryStatus, newStatus: DeliveryStatus): boolean {
+  private shouldRejectStatusRegression(
+    currentStatus: DeliveryStatus,
+    newStatus: DeliveryStatus,
+  ): boolean {
     // Define status precedence (higher value = more advanced)
     const statusPrecedence: Record<DeliveryStatus, number> = {
       [DeliveryStatus.PENDING]: 0,
@@ -702,35 +1039,23 @@ export class DeliveryService {
 
     // Reject if new status has lower precedence (regression)
     // Exception: FAILED and CANCELLED can always be set (they are terminal states)
-    if (newStatus === DeliveryStatus.FAILED || newStatus === DeliveryStatus.CANCELLED) {
+    if (
+      newStatus === DeliveryStatus.FAILED ||
+      newStatus === DeliveryStatus.CANCELLED
+    ) {
       return false;
     }
 
     return newPrecedence < currentPrecedence;
   }
 
-  private mapNinetyNineStatusToDeliveryStatus(statusCode: string, statusName: string): DeliveryStatus | null {
-    const statusMap: Record<string, DeliveryStatus> = {
-      '1001': DeliveryStatus.QUOTED, // DRAFT
-      '1002': DeliveryStatus.REQUESTING, // CONFIRMED
-      '2001': DeliveryStatus.REQUESTING, // PARA RECOGER
-      '2002': DeliveryStatus.SEARCHING_DRIVER, // CONDUCTOR ASIGNADO PARA RECOGER
-      '2003': DeliveryStatus.DRIVER_ASSIGNED, // RECOGIDA CONFIRMADA
-      '2101': DeliveryStatus.FAILED, // RECOGIDA FALLIDA
-      '3001': DeliveryStatus.IN_TRANSIT, // EN ALMACÉN
-      '3004': DeliveryStatus.IN_TRANSIT, // SE HA SOLICITADO UNA TRANSFERENCIA
-      '4001': DeliveryStatus.IN_TRANSIT, // ON ROAD TO DELIVERY
-      '4002': DeliveryStatus.DELIVERED, // DELIVERED
-      '4101': DeliveryStatus.FAILED, // UNSUCCESSFUL DELIVERY
-      '5001': DeliveryStatus.FAILED, // ON ROAD TO RETURN
-      '5002': DeliveryStatus.FAILED, // RETURNED
-      '5101': DeliveryStatus.FAILED, // UNSUCCESSFUL RETURN
-      '7101': DeliveryStatus.FAILED, // IN CORRECTION
-      '8001': DeliveryStatus.FAILED, // STOLEN
-      '8003': DeliveryStatus.CANCELLED, // CANCELLED
-      '8004': DeliveryStatus.FAILED, // DAMAGED
-    };
-
-    return statusMap[statusCode] || null;
+  private mapNinetyNineStatusToDeliveryStatus(
+    statusCode: string,
+    statusName: string,
+  ): DeliveryStatus | null {
+    return this.ninetyNineService.mapStatusToDeliveryStatus(
+      statusCode,
+      statusName,
+    );
   }
 }

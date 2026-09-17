@@ -28,7 +28,13 @@ export class PaymentsController {
   @Roles(UserRole.CUSTOMER)
   create(
     @Req() req: any,
-    @Body(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }))
+    @Body(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      }),
+    )
     body: CreatePaymentDto,
   ) {
     if (req.user.role !== UserRole.CUSTOMER) {
@@ -42,7 +48,13 @@ export class PaymentsController {
   @Roles(UserRole.CUSTOMER)
   checkout(
     @Req() req: any,
-    @Body(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }))
+    @Body(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      }),
+    )
     body: CreatePaymentDto,
   ) {
     if (req.user.role !== UserRole.CUSTOMER) {
@@ -77,7 +89,13 @@ export class PaymentsController {
   update(
     @Req() req: any,
     @Param('id') id: string,
-    @Body(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }))
+    @Body(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      }),
+    )
     body: UpdatePaymentDto,
   ) {
     return this.paymentsService.update(req.user, id, body);
@@ -89,6 +107,8 @@ export class PaymentsController {
   remove(@Req() req: any, @Param('id') id: string) {
     void req;
     void id;
-    throw new ForbiddenException('Payments are historical records and cannot be deleted.');
+    throw new ForbiddenException(
+      'Payments are historical records and cannot be deleted.',
+    );
   }
 }

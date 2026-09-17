@@ -26,7 +26,17 @@ export class OrdersController {
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.CUSTOMER)
-  create(@Req() req: any, @Body(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true })) body: CreateOrderDto) {
+  create(
+    @Req() req: any,
+    @Body(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      }),
+    )
+    body: CreateOrderDto,
+  ) {
     if (req.user.role !== UserRole.CUSTOMER) {
       throw new ForbiddenException('Only customers can create orders');
     }
@@ -53,7 +63,13 @@ export class OrdersController {
   updateStatus(
     @Req() req: any,
     @Param('id') id: string,
-    @Body(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }))
+    @Body(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      }),
+    )
     body: UpdateOrderStatusDto,
   ) {
     return this.ordersService.updateStatus(req.user, id, body);
@@ -65,6 +81,8 @@ export class OrdersController {
   async remove(@Req() req: any, @Param('id') id: string) {
     void req;
     void id;
-    throw new ForbiddenException('Orders are historical records and cannot be deleted.');
+    throw new ForbiddenException(
+      'Orders are historical records and cannot be deleted.',
+    );
   }
 }

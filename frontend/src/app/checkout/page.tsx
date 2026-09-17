@@ -1,0 +1,402 @@
+'use client';
+
+import Link from 'next/link';
+import Image from 'next/image';
+import { FormEvent, useEffect, useState } from 'react';
+import { useAuth } from '@/hooks/useAuth';
+import { useCart } from '@/hooks/useCart';
+import { api } from '@/lib/api';
+import { Address, CreateAddressPayload, Payment } from '@/lib/types';
+import { toNumber } from '@/lib/utils';
+import { PriceFormatter } from '@/components/ui/PriceFormatter';
+import { LoadingState } from '@/components/ui/LoadingState';
+import { Button } from '@/components/ui/Button';
+
+type PaymentChoice = Payment['method'];
+type AddressForm = Omit<CreateAddressPayload, 'type' | 'isDefault'>;
+
+const initialAddress: AddressForm = {
+  recipient: '',
+  zipcode: '',
+  street: '',
+  number: '',
+  complement: '',
+  district: '',
+  city: '',
+  state: '',
+  reference: '',
+};
+
+const paymentOptions: Array<{ value: PaymentChoice; label: string; description: string; available: boolean }> = [
+  { value: 'PIX', label: 'PIX', description: 'Pagamento instantâneo', available: true },
+  { value: 'CREDIT_CARD', label: 'Cartão de crédito', description: 'Disponível em breve', available: false },
+  { value: 'BOLETO', label: 'Boleto bancário', description: 'Disponível em breve', available: false },
+];
+
+function statusMessage(status: number): string {
+  if (status === 401 || status === 403) return 'Sua sessão expirou. Entre novamente para continuar.';
+  if (status === 400) return 'Confira os dados informados e tente novamente.';
+  if (status === 404) return 'O endereço ou o carrinho não foi encontrado.';
+  return 'Não foi possível concluir o checkout. Tente novamente.';
+}
+
+function Field({
+  label,
+  name,
+  value,
+  onChange,
+  required = false,
+  className = '',
+  maxLength,
+  inputMode,
+}: {
+  label: string;
+  name: keyof AddressForm;
+  value: string;
+  onChange: (name: keyof AddressForm, value: string) => void;
+  required?: boolean;
+  className?: string;
+  maxLength?: number;
+  inputMode?: 'text' | 'numeric';
+}) {
+  return (
+    <label className={`block ${className}`}>
+      <span className="mb-1.5 block text-sm font-semibold text-foreground">{label}</span>
+      <input
+        name={name}
+        value={value}
+        onChange={(event) => onChange(name, event.target.value)}
+        required={required}
+        maxLength={maxLength}
+        inputMode={inputMode}
+        className="w-full rounded-lg border border-border bg-background px-3.5 py-2.5 text-sm text-foreground outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20"
+      />
+    </label>
+  );
+}
+
+export default function CheckoutPage() {
+  const { user, isAuthenticated, loading: authLoading } = useAuth();
+  const { cart, loading: cartLoading, initialized, refresh } = useCart();
+  const [addresses, setAddresses] = useState<Address[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState('new');
+  const [address, setAddress] = useState<AddressForm>(initialAddress);
+  const [payment, setPayment] = useState<PaymentChoice>('PIX');
+  const [notes, setNotes] = useState('');
+  const [loadingAddresses, setLoadingAddresses] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<{ number: string; payment?: Payment; paymentError?: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    let active = true;
+    void api.getAddresses().then((result) => {
+      if (!active) return;
+      if (result.ok) {
+        setAddresses(result.data);
+        const defaultAddress = result.data.find((item) => item.isDefault) ?? result.data[0];
+        if (defaultAddress) setSelectedAddressId(defaultAddress.id);
+      } else {
+        setError(statusMessage(result.status));
+      }
+      setLoadingAddresses(false);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (!success?.payment?.expiresAt) return;
+
+    const expiresAt = new Date(success.payment.expiresAt).getTime();
+    const now = Date.now();
+    const initialTimeLeft = Math.max(0, Math.floor((expiresAt - now) / 1000));
+
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev === null || prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    const timeout = setTimeout(() => {
+      setTimeLeft(initialTimeLeft);
+    }, 0);
+
+    return () => {
+      clearInterval(timer);
+      clearTimeout(timeout);
+    };
+  }, [success?.payment?.expiresAt]);
+
+  const handleCopyPixKey = async () => {
+    if (success?.payment?.pixCopyPaste) {
+      try {
+        await navigator.clipboard.writeText(success.payment.pixCopyPaste);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch (error) {
+        console.error('Failed to copy:', error);
+      }
+    }
+  };
+
+  const items = cart?.items ?? [];
+  const subtotal = toNumber(cart?.totalAmount) ?? 0;
+  const shipping = 0;
+  const total = subtotal + shipping;
+
+  const updateAddress = (name: keyof AddressForm, value: string) => {
+    setAddress((current) => ({ ...current, [name]: value }));
+  };
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+
+    if (payment !== 'PIX') {
+      setError('Este meio de pagamento ainda não está disponível. Selecione PIX.');
+      return;
+    }
+
+    if (!selectedAddressId && selectedAddressId !== 'new') {
+      setError('Selecione um endereço de entrega.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      let addressId = selectedAddressId;
+      if (selectedAddressId === 'new') {
+        const payload: CreateAddressPayload = {
+          ...address,
+          recipient: address.recipient || user?.name || '',
+          zipcode: address.zipcode.replace(/\D/g, ''),
+          state: address.state.trim().toUpperCase(),
+          type: 'SHIPPING',
+          isDefault: addresses.length === 0,
+        };
+        if (payload.zipcode.length !== 8 || payload.state.length !== 2) {
+          setError('Informe um CEP com 8 dígitos e uma UF válida.');
+          return;
+        }
+        const addressResult = await api.createAddress(payload);
+        if (!addressResult.ok) {
+          setError(statusMessage(addressResult.status));
+          return;
+        }
+        addressId = addressResult.data.id;
+      }
+
+      const orderResult = await api.createOrder(addressId, notes.trim() || undefined);
+      if (!orderResult.ok) {
+        setError(statusMessage(orderResult.status));
+        return;
+      }
+
+      const paymentResult = await api.createPayment(orderResult.data.id, payment);
+      await refresh();
+      if (paymentResult.ok) {
+        setSuccess({ number: orderResult.data.number, payment: paymentResult.data });
+      } else {
+        setSuccess({
+          number: orderResult.data.number,
+          paymentError: 'Pedido criado, mas não foi possível iniciar o pagamento PIX. Consulte o suporte.',
+        });
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (authLoading || (cartLoading && !initialized) || (isAuthenticated && loadingAddresses)) {
+    return <LoadingState message="Preparando seu checkout..." className="min-h-[500px]" />;
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <main className="container-custom py-16">
+        <section className="mx-auto max-w-xl rounded-2xl border border-border bg-muted/50 p-8 text-center">
+          <h1 className="text-2xl font-bold text-foreground">Entre para finalizar sua compra</h1>
+          <p className="mt-3 text-muted-foreground">Seu carrinho e seus endereços ficam vinculados à sua conta.</p>
+          <Link href="/login" className="mt-6 inline-flex rounded-lg bg-accent px-6 py-3 font-semibold text-ink hover:bg-accent-dark">
+            Entrar na conta
+          </Link>
+        </section>
+      </main>
+    );
+  }
+
+  if (success) {
+    return (
+      <main className="container-custom py-16">
+        <section className="mx-auto max-w-2xl rounded-2xl border border-success/30 bg-success/10 p-8 text-center">
+          <p className="text-sm font-semibold uppercase tracking-[0.16em] text-success">Pedido confirmado</p>
+          <h1 className="mt-3 text-3xl font-bold text-foreground">Obrigado pela sua compra</h1>
+          <p className="mt-3 text-muted-foreground">Pedido {success.number} criado com sucesso.</p>
+          {success.paymentError && <p role="alert" className="mt-4 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-foreground">{success.paymentError}</p>}
+          {success.payment?.pixCopyPaste && (
+            <div className="mt-6 space-y-4">
+              {success.payment.pixQrCode && (
+                <div className="flex justify-center">
+                  <Image
+                    src={success.payment.pixQrCode}
+                    alt="QR Code PIX"
+                    width={192}
+                    height={192}
+                    className="h-48 w-48 rounded-lg border border-border bg-white"
+                  />
+                </div>
+              )}
+              <div className="rounded-xl border border-border bg-background p-4 text-left">
+                <p className="text-sm font-semibold text-foreground">PIX copia e cola</p>
+                <p className="mt-2 break-all text-xs text-muted-foreground">{success.payment.pixCopyPaste}</p>
+                <button
+                  type="button"
+                  onClick={handleCopyPixKey}
+                  className="mt-3 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-ink transition hover:bg-accent-dark"
+                >
+                  {copied ? 'Chave Copiada!' : 'Copiar Chave PIX'}
+                </button>
+              </div>
+              {timeLeft !== null && (
+                <div className="rounded-lg border border-warning/30 bg-warning/10 px-4 py-3">
+                  <p className="text-sm font-semibold text-warning">
+                    {timeLeft > 0
+                      ? `Este QR Code expira em ${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}`
+                      : 'Este QR Code expirou'}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+          <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:justify-center">
+            <Link href="/pedidos" className="inline-flex rounded-lg bg-accent px-6 py-3 font-semibold text-ink hover:bg-accent-dark">
+              Ver meus pedidos
+            </Link>
+            <Link href="/loja" className="inline-flex rounded-lg border border-border bg-background px-6 py-3 font-semibold text-foreground hover:bg-muted/50">
+              Voltar para a loja
+            </Link>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (items.length === 0) {
+    return (
+      <main className="container-custom py-16">
+        <section className="mx-auto max-w-xl rounded-2xl border border-border bg-muted/50 p-8 text-center">
+          <h1 className="text-2xl font-bold text-foreground">Seu carrinho está vazio</h1>
+          <p className="mt-3 text-muted-foreground">Adicione produtos antes de iniciar o checkout.</p>
+          <Link href="/loja/produtos" className="mt-6 inline-flex rounded-lg bg-accent px-6 py-3 font-semibold text-ink hover:bg-accent-dark">
+            Explorar produtos
+          </Link>
+        </section>
+      </main>
+    );
+  }
+
+  return (
+    <main className="container-custom py-8 md:py-12">
+      <nav aria-label="Você está aqui" className="mb-4 text-sm text-muted-foreground">
+        <Link href="/loja" className="hover:text-accent">Início</Link>
+        <span className="mx-2" aria-hidden="true">/</span>
+        <span className="font-medium text-foreground">Checkout</span>
+      </nav>
+      <div className="mb-8">
+        <p className="text-sm font-semibold uppercase tracking-[0.16em] text-accent">Finalização</p>
+        <h1 className="mt-2 text-3xl font-bold text-foreground">Conclua seu pedido</h1>
+      </div>
+
+      {error && <div role="alert" className="mb-6 rounded-lg border border-error/30 bg-error/10 px-4 py-3 text-sm text-error">{error}</div>}
+
+      <form onSubmit={submit} className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="space-y-6">
+          <section className="rounded-2xl border border-border bg-background p-5 md:p-7">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-bold text-foreground">Endereço de entrega</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Usaremos estes dados para enviar seu pedido.</p>
+              </div>
+              {addresses.length > 0 && <span className="text-sm text-muted-foreground">{addresses.length} salvo{addresses.length === 1 ? '' : 's'}</span>}
+            </div>
+
+            {addresses.length > 0 && (
+              <div className="mb-6 grid gap-3">
+                {addresses.map((item) => (
+                  <label key={item.id} className={`cursor-pointer rounded-xl border p-4 transition ${selectedAddressId === item.id ? 'border-accent bg-accent/5' : 'border-border hover:border-accent/50'}`}>
+                    <input type="radio" name="saved-address" value={item.id} checked={selectedAddressId === item.id} onChange={() => setSelectedAddressId(item.id)} className="sr-only" />
+                    <span className="flex items-start justify-between gap-3">
+                      <span>
+                        <span className="block font-semibold text-foreground">{item.nickname || item.recipient}</span>
+                        <span className="mt-1 block text-sm text-muted-foreground">{item.street}, {item.number}{item.complement ? `, ${item.complement}` : ''} · {item.city}/{item.state}</span>
+                        <span className="block text-sm text-muted-foreground">CEP {item.zipcode}</span>
+                      </span>
+                      {item.isDefault && <span className="text-xs font-semibold text-accent">Principal</span>}
+                    </span>
+                  </label>
+                ))}
+                <label className={`cursor-pointer rounded-xl border p-4 transition ${selectedAddressId === 'new' ? 'border-accent bg-accent/5' : 'border-border hover:border-accent/50'}`}>
+                  <input type="radio" name="saved-address" value="new" checked={selectedAddressId === 'new'} onChange={() => setSelectedAddressId('new')} className="sr-only" />
+                  <span className="font-semibold text-foreground">Usar um novo endereço</span>
+                </label>
+              </div>
+            )}
+
+            {selectedAddressId === 'new' && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Recebedor" name="recipient" value={address.recipient} onChange={updateAddress} required className="sm:col-span-2" />
+                <Field label="CEP" name="zipcode" value={address.zipcode} onChange={updateAddress} required maxLength={9} inputMode="numeric" />
+                <Field label="Rua" name="street" value={address.street} onChange={updateAddress} required />
+                <Field label="Número" name="number" value={address.number} onChange={updateAddress} required />
+                <Field label="Complemento" name="complement" value={address.complement ?? ''} onChange={updateAddress} />
+                <Field label="Bairro" name="district" value={address.district} onChange={updateAddress} required />
+                <Field label="Cidade" name="city" value={address.city} onChange={updateAddress} required />
+                <Field label="Estado (UF)" name="state" value={address.state} onChange={updateAddress} required maxLength={2} />
+                <Field label="Referência" name="reference" value={address.reference ?? ''} onChange={updateAddress} className="sm:col-span-2" />
+              </div>
+            )}
+          </section>
+
+          <section className="rounded-2xl border border-border bg-background p-5 md:p-7">
+            <h2 className="text-xl font-bold text-foreground">Forma de pagamento</h2>
+            <div className="mt-5 grid gap-3">
+              {paymentOptions.map((option) => (
+                <label key={option.value} className={`flex items-center gap-3 rounded-xl border p-4 ${option.available ? 'cursor-pointer hover:border-accent/60' : 'cursor-not-allowed opacity-55'} ${payment === option.value ? 'border-accent bg-accent/5' : 'border-border'}`}>
+                  <input type="radio" name="payment" value={option.value} checked={payment === option.value} onChange={() => option.available && setPayment(option.value)} disabled={!option.available} className="h-4 w-4 accent-[#c9a227]" />
+                  <span className="flex-1"><span className="block font-semibold text-foreground">{option.label}</span><span className="block text-sm text-muted-foreground">{option.description}</span></span>
+                </label>
+              ))}
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-border bg-background p-5 md:p-7">
+            <label className="block"><span className="text-sm font-semibold text-foreground">Observações do pedido <span className="font-normal text-muted-foreground">(opcional)</span></span><textarea value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={500} rows={3} className="mt-2 w-full resize-y rounded-lg border border-border px-3.5 py-2.5 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20" /></label>
+          </section>
+        </div>
+
+        <aside className="h-fit rounded-2xl bg-ink p-6 text-white lg:sticky lg:top-6">
+          <h2 className="text-xl font-bold">Resumo da compra</h2>
+          <ul className="mt-5 space-y-4 border-b border-white/15 pb-5">
+            {items.map((item) => <li key={item.id ?? item.productId} className="flex justify-between gap-4 text-sm"><span className="text-white/75">{item.quantity}x {item.name ?? 'Produto'}</span><PriceFormatter price={(toNumber(item.price) ?? 0) * item.quantity} /></li>)}
+          </ul>
+          <dl className="mt-5 space-y-2 text-sm"><div className="flex justify-between"><dt className="text-white/65">Subtotal</dt><dd><PriceFormatter price={subtotal} /></dd></div><div className="flex justify-between"><dt className="text-white/65">Frete</dt><dd><PriceFormatter price={shipping} /></dd></div><div className="mt-4 flex justify-between border-t border-white/15 pt-4 text-lg font-bold"><dt>Total</dt><dd className="text-accent"><PriceFormatter price={total} /></dd></div></dl>
+          <Button type="submit" size="lg" className="mt-7 w-full" disabled={submitting || payment !== 'PIX'}>{submitting ? 'Processando pedido...' : 'Confirmar pedido'}</Button>
+          <p className="mt-3 text-center text-xs text-white/55">O estoque é validado no momento da confirmação.</p>
+        </aside>
+      </form>
+    </main>
+  );
+}

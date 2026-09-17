@@ -1,4 +1,9 @@
-import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { UserRole, UserStatus } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -12,7 +17,9 @@ export class UsersService {
   private hashPassword(password: string) {
     const salt = randomBytes(16).toString('hex');
     const iterations = 310000;
-    const hash = pbkdf2Sync(password, salt, iterations, 32, 'sha256').toString('hex');
+    const hash = pbkdf2Sync(password, salt, iterations, 32, 'sha256').toString(
+      'hex',
+    );
     return `${iterations}:${salt}:${hash}`;
   }
 
@@ -20,7 +27,13 @@ export class UsersService {
     try {
       const [iterationsStr, salt, key] = stored.split(':');
       const iterations = parseInt(iterationsStr, 10);
-      const derived = pbkdf2Sync(password, salt, iterations, 32, 'sha256').toString('hex');
+      const derived = pbkdf2Sync(
+        password,
+        salt,
+        iterations,
+        32,
+        'sha256',
+      ).toString('hex');
       const keyBuf = Buffer.from(key, 'hex');
       const derivedBuf = Buffer.from(derived, 'hex');
       if (keyBuf.length !== derivedBuf.length) return false;
@@ -146,7 +159,10 @@ export class UsersService {
     }
   }
 
-  async updateRoleStatus(id: string, data: { role?: UserRole; status?: UserStatus }) {
+  async updateRoleStatus(
+    id: string,
+    data: { role?: UserRole; status?: UserStatus },
+  ) {
     const updateData: any = {};
     if (data.role !== undefined) updateData.role = data.role;
     if (data.status !== undefined) updateData.status = data.status;

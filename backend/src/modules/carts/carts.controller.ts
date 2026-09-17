@@ -15,7 +15,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { AddCartItemDto } from './dto/add-cart-item.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
 
-@Controller('api/cart')
+@Controller('cart')
 export class CartsController {
   constructor(private readonly cartsService: CartsService) {}
 
@@ -42,7 +42,11 @@ export class CartsController {
 
   @Patch('items/:productId')
   @UseGuards(JwtAuthGuard)
-  async updateItem(@Req() req: any, @Param('productId') productId: string, @Body() body: UpdateCartItemDto) {
+  async updateItem(
+    @Req() req: any,
+    @Param('productId') productId: string,
+    @Body() body: UpdateCartItemDto,
+  ) {
     const forbidden = ['userId', 'cartId', 'product', 'price'];
     for (const f of forbidden) {
       if (Object.prototype.hasOwnProperty.call(body as any, f)) {

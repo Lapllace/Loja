@@ -248,11 +248,23 @@ export class PaymentsService {
         '',
     );
 
+    const referenceValue = referenceId ? referenceId.replace(/^order-/, '') : '';
+    const referenceNumber = referenceValue ? Number(referenceValue) : NaN;
+
+    const referenceConditions = referenceValue
+      ? [
+          { order: { id: referenceValue } },
+          ...(Number.isFinite(referenceNumber) && referenceNumber > 0
+            ? [{ order: { number: referenceNumber }]
+            : []),
+        ]
+      : [];
+
     const payment = await this.prisma.payment.findFirst({
       where: {
         OR: [
           ...(transactionId ? [{ transactionId }] : []),
-          ...(referenceId ? [{ order: { id: referenceId.replace(/^order-/, '') || undefined } }, { order: { number: Number(referenceId.replace(/^order-/, '')) || undefined } }] : []),
+          ...referenceConditions,
         ],
       },
       include: { order: true },

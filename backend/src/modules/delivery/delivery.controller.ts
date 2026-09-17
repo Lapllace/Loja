@@ -29,7 +29,14 @@ export class DeliveryController {
   @Roles(UserRole.CUSTOMER)
   quote(
     @Req() req: any,
-    @Body(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true })) body: QuoteDeliveryDto,
+    @Body(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      }),
+    )
+    body: QuoteDeliveryDto,
   ): Promise<DeliveryQuoteResponse> {
     if (req.user.role !== UserRole.CUSTOMER) {
       throw new ForbiddenException('Only customers can quote delivery');
@@ -40,7 +47,17 @@ export class DeliveryController {
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.CUSTOMER, UserRole.ADMIN, UserRole.OWNER)
-  create(@Req() req: any, @Body(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true })) body: CreateDeliveryDto) {
+  create(
+    @Req() req: any,
+    @Body(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      }),
+    )
+    body: CreateDeliveryDto,
+  ) {
     return this.deliveryService.create(req.user, body);
   }
 
@@ -75,7 +92,18 @@ export class DeliveryController {
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.OWNER)
-  update(@Req() req: any, @Param('id') id: string, @Body(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true })) body: UpdateDeliveryDto) {
+  update(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body(
+      new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      }),
+    )
+    body: UpdateDeliveryDto,
+  ) {
     return this.deliveryService.update(req.user, id, body);
   }
 
@@ -88,11 +116,17 @@ export class DeliveryController {
 
   @Post('webhooks/uber')
   async uberWebhook(@Req() req: any) {
-    return this.deliveryService.handleUberWebhook(req.rawBody ?? req.body, req.headers ?? {});
+    return this.deliveryService.handleUberWebhook(
+      req.rawBody ?? req.body,
+      req.headers ?? {},
+    );
   }
 
   @Post('webhooks/ninenine')
   async ninetyNineWebhook(@Req() req: any) {
-    return this.deliveryService.handleNinetyNineWebhook(req.rawBody ?? req.body, req.headers ?? {});
+    return this.deliveryService.handleNinetyNineWebhook(
+      req.rawBody ?? req.body,
+      req.headers ?? {},
+    );
   }
 }
