@@ -30,7 +30,7 @@ export function ProductGrid({
 
   if (loading) {
     return (
-      <div className={`${gridCols} gap-6`}>
+      <div className={`${gridCols} gap-4 md:gap-6`}>
         {[...Array(8)].map((_, i) => (
           <CardSkeleton key={i} />
         ))}
@@ -68,7 +68,7 @@ export function ProductGrid({
   }
 
   return (
-    <div className={`${gridCols} gap-6`}>
+    <div className={`${gridCols} gap-4 md:gap-6`}>
       {products.map((product, index) => (
         <ProductCard key={product.id} product={product} priority={index < 4} />
       ))}

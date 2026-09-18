@@ -2,6 +2,8 @@
 
 
 
+import { useEffect, useRef, useState } from 'react';
+
 import Link from 'next/link';
 
 import Image from 'next/image';
@@ -42,7 +44,7 @@ export function Header({ categories }: HeaderProps) {
 
   const cartCount = itemCount;
 
-
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'OWNER';
 
   const handleLogout = () => {
 
@@ -50,17 +52,56 @@ export function Header({ categories }: HeaderProps) {
 
   };
 
+  // Hide on scroll: oculta o header ao descer e reexibe ao subir.
 
+  const [hidden, setHidden] = useState(false);
+
+  const lastScrollY = useRef(0);
+
+  useEffect(() => {
+
+    const handleScroll = () => {
+
+      const currentScrollY = window.scrollY;
+
+      // Só alterna depois de sair do topo, evitando flicker em micro-rolagens.
+
+      if (currentScrollY > lastScrollY.current && currentScrollY > 80) {
+
+        setHidden(true);
+
+      } else if (currentScrollY < lastScrollY.current) {
+
+        setHidden(false);
+
+      }
+
+      lastScrollY.current = currentScrollY;
+
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+
+    return () => window.removeEventListener('scroll', handleScroll);
+
+  }, []);
 
   return (
 
-    <header className="bg-ink text-white sticky top-0 z-50 border-b border-white/10">
+    <header
+      className={`sticky top-0 z-50 border-b border-white/10 bg-ink/95 text-white backdrop-blur-md transition-transform duration-300 ease-in-out ${
+
+        hidden ? '-translate-y-full' : 'translate-y-0'
+
+      }`}
+
+    >
 
       <div className="container-custom">
 
         {/* Barra principal */}
 
-        <div className="flex items-center gap-4 py-3.5">
+        <div className="flex items-center gap-4 py-3 md:py-4">
 
           {/* Logo */}
 
@@ -98,8 +139,9 @@ export function Header({ categories }: HeaderProps) {
 
           {/* Ações */}
 
-          <div className="flex items-center gap-1 ml-auto">            {/* Carrinho (ativo) */}
+          <div className="flex items-center gap-1.5 sm:gap-2 ml-auto">
 
+            {/* Carrinho (ativo) */}
 
             <button
               type="button"
@@ -112,16 +154,14 @@ export function Header({ categories }: HeaderProps) {
 
               aria-haspopup="dialog"
 
-              className="relative p-2.5 rounded-lg text-white/80 hover:bg-white/5 transition-colors cursor-pointer"
+              className="relative inline-flex size-9 sm:size-10 items-center justify-center rounded-full text-white/80 transition-all duration-200 hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-ink cursor-pointer"
 
             >
 
 
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-
+              <svg className="size-5.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.014 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
-
 
               </svg>
 
@@ -149,7 +189,7 @@ export function Header({ categories }: HeaderProps) {
 
             {loading ? (
 
-              <div className="hidden sm:inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-accent text-ink opacity-50">
+              <div className="hidden sm:inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-ink opacity-50">
 
                 Carregando...
 
@@ -159,28 +199,60 @@ export function Header({ categories }: HeaderProps) {
 
               <>
 
+                {isAdmin && (
+
+                  <Link
+                    href="/admin/produtos/novo"
+
+                    className="hidden sm:inline-flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm font-semibold text-white transition-all duration-200 hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-accent/60"
+
+                  >
+
+                    Painel Admin / Cadastrar Produto
+                  </Link>
+
+                )}
+
                 <Link
+                  href="/conta"
 
-                  href="/minha-conta"
+                  title="Minha Conta"
 
-                  className="hidden sm:inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-accent text-ink hover:bg-accent/90"
+                  aria-label="Minha Conta"
+
+                  className="inline-flex items-center gap-2 rounded-lg bg-accent px-3.5 py-2 text-sm font-semibold text-ink transition-all duration-200 hover:bg-accent-dark focus-visible:ring-2 focus-visible:ring-accent/60"
 
                 >
 
-                  {user?.name}
+                  <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 20.25a7.5 7.5 0 0115 0v.75H4.5v-.75z" />
+
+                  </svg>
+
+                  <span className="hidden sm:inline">{user?.name}</span>
+
+                  <span className="sm:hidden">Conta</span>
 
                 </Link>
 
-                <button
+                <Link
+                  href="/pedidos"
+                  title="Meus Pedidos"
+                  aria-label="Meus Pedidos"
+                  className="hidden lg:inline-flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm font-semibold text-white transition-all duration-200 hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-accent/60"
+                >
+                  Meus Pedidos
+                </Link>
 
+                <button
                   onClick={handleLogout}
 
-                  className="hidden sm:inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-white/10 text-white hover:bg-white/20"
+                  className="hidden sm:inline-flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm font-semibold text-white transition-all duration-200 hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-accent/60"
 
                 >
 
                   Sair
-
                 </button>
 
               </>
@@ -190,27 +262,23 @@ export function Header({ categories }: HeaderProps) {
               <>
 
                 <Link
-
                   href="/login"
 
-                  className="hidden sm:inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-accent text-ink hover:bg-accent/90"
+                  className="hidden sm:inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-ink transition-all duration-200 hover:bg-accent-dark focus-visible:ring-2 focus-visible:ring-accent/60"
 
                 >
 
                   Entrar
-
                 </Link>
 
                 <Link
-
                   href="/cadastro"
 
-                  className="hidden sm:inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-white/10 text-white hover:bg-white/20"
+                  className="hidden sm:inline-flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm font-semibold text-white transition-all duration-200 hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-accent/60"
 
                 >
 
                   Criar conta
-
                 </Link>
 
               </>
@@ -224,14 +292,13 @@ export function Header({ categories }: HeaderProps) {
             <details className="md:hidden relative group">
 
               <summary
-
-                className="p-2.5 rounded-lg text-white/80 hover:bg-white/5 transition-colors cursor-pointer list-none [&::-webkit-details-marker]:hidden"
+                className="inline-flex size-9 sm:size-10 items-center justify-center rounded-full text-white/80 transition-all duration-200 hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-accent/60 cursor-pointer list-none [&::-webkit-details-marker]:hidden"
 
                 aria-label="Abrir menu"
 
               >
 
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <svg className="size-5.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
 
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
 
@@ -239,13 +306,13 @@ export function Header({ categories }: HeaderProps) {
 
               </summary>
 
-              <div className="absolute right-0 top-full mt-2 w-64 bg-ink border border-white/10 rounded-xl shadow-xl p-2 max-h-[70vh] overflow-y-auto">
+              <div className="absolute right-0 top-full mt-2 w-64 rounded-xl border-white/10 bg-ink p-2 shadow-2xl shadow-black/40 max-h-[70vh] overflow-y-auto">
 
                 <Link
 
                   href="/loja"
 
-                  className="block px-3 py-2.5 rounded-lg text-sm text-white/90 hover:bg-white/5"
+                  className="block rounded-lg px-3 py-2.5 text-sm text-white/90 transition-colors duration-200 hover:bg-white/10 hover:text-white"
 
                 >
 
@@ -257,7 +324,7 @@ export function Header({ categories }: HeaderProps) {
 
                   href="/loja/produtos"
 
-                  className="block px-3 py-2.5 rounded-lg text-sm text-white/90 hover:bg-white/5"
+                  className="block rounded-lg px-3 py-2.5 text-sm text-white/90 transition-colors duration-200 hover:bg-white/10 hover:text-white"
 
                 >
 
@@ -272,20 +339,39 @@ export function Header({ categories }: HeaderProps) {
                     <div className="px-3 pt-3 pb-1 text-[11px] uppercase tracking-wider text-white/40">
 
                       Minha conta
-
                     </div>
 
                     <Link
+                      href="/conta"
 
-                      href="/minha-conta"
-
-                      className="block px-3 py-2.5 rounded-lg text-sm text-white/90 hover:bg-white/5"
+                      className="block rounded-lg px-3 py-2.5 text-sm text-white/90 transition-colors duration-200 hover:bg-white/10 hover:text-white"
 
                     >
 
                       {user?.name}
 
                     </Link>
+
+                    <Link
+                      href="/pedidos"
+                      className="block rounded-lg px-3 py-2.5 text-sm text-white/90 transition-colors duration-200 hover:bg-white/10 hover:text-white"
+                    >
+                      Meus Pedidos
+                    </Link>
+
+                    {isAdmin && (
+
+                      <Link
+                        href="/admin/produtos/novo"
+
+                        className="block rounded-lg px-3 py-2.5 text-sm text-white/90 transition-colors duration-200 hover:bg-white/10 hover:text-white"
+
+                      >
+
+                        Painel Admin / Cadastrar Produto
+                      </Link>
+
+                    )}
 
                     <button
 
@@ -310,31 +396,36 @@ export function Header({ categories }: HeaderProps) {
                     <div className="px-3 pt-3 pb-1 text-[11px] uppercase tracking-wider text-white/40">
 
                       Conta
-
                     </div>
 
                     <Link
+                      href="/conta"
 
+                      className="block rounded-lg px-3 py-2.5 text-sm text-white/90 transition-colors duration-200 hover:bg-white/10 hover:text-white"
+
+                    >
+
+                      Minha Conta
+                    </Link>
+
+                    <Link
                       href="/login"
 
-                      className="block px-3 py-2.5 rounded-lg text-sm text-white/90 hover:bg-white/5"
+                      className="block rounded-lg px-3 py-2.5 text-sm text-white/90 transition-colors duration-200 hover:bg-white/10 hover:text-white"
 
                     >
 
                       Entrar
-
                     </Link>
 
                     <Link
-
                       href="/cadastro"
 
-                      className="block px-3 py-2.5 rounded-lg text-sm text-white/90 hover:bg-white/5"
+                      className="block rounded-lg px-3 py-2.5 text-sm text-white/90 transition-colors duration-200 hover:bg-white/10 hover:text-white"
 
                     >
 
                       Criar conta
-
                     </Link>
 
                   </>
@@ -355,7 +446,7 @@ export function Header({ categories }: HeaderProps) {
 
                     href={`/loja/categorias/${category.slug}`}
 
-                    className="block px-3 py-2.5 rounded-lg text-sm text-white/90 hover:bg-white/5"
+                    className="block rounded-lg px-3 py-2.5 text-sm text-white/90 transition-colors duration-200 hover:bg-white/10 hover:text-white"
 
                   >
 
@@ -377,7 +468,7 @@ export function Header({ categories }: HeaderProps) {
 
         {/* Busca - Mobile */}
 
-        <div className="md:hidden pb-3.5">
+        <div className="md:hidden pb-4">
 
           <SearchBar />
 
@@ -389,21 +480,20 @@ export function Header({ categories }: HeaderProps) {
 
         <nav className="hidden md:block border-t border-white/10" aria-label="Categorias">
 
-          <ul className="flex items-center gap-1 py-2 overflow-x-auto">
+          <ul className="flex items-center gap-1 py-2 overflow-x-auto [&::-webkit-scrollbar]:hidden">
 
             <li>
 
               <Link
 
-                href="/loja"
+                  href="/loja"
 
-                className="block px-3 py-2 rounded-lg text-sm font-medium text-white/90 hover:bg-white/5 whitespace-nowrap transition-colors"
+                  className="block whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium text-white/90 transition-all duration-200 hover:bg-white/10 hover:text-white"
 
-              >
+                >
 
-                Início
-
-              </Link>
+                  Início
+                </Link>
 
             </li>
 
@@ -411,15 +501,14 @@ export function Header({ categories }: HeaderProps) {
 
               <Link
 
-                href="/loja/produtos"
+                  href="/loja/produtos"
 
-                className="block px-3 py-2 rounded-lg text-sm font-medium text-white/90 hover:bg-white/5 whitespace-nowrap transition-colors"
+                  className="block whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium text-white/90 transition-all duration-200 hover:bg-white/10 hover:text-white"
 
-              >
+                >
 
-                Produtos
-
-              </Link>
+                  Produtos
+                </Link>
 
             </li>
 
@@ -433,7 +522,7 @@ export function Header({ categories }: HeaderProps) {
 
                   href={`/loja/categorias/${category.slug}`}
 
-                  className="block px-3 py-2 rounded-lg text-sm font-medium text-white/90 hover:bg-white/5 hover:text-accent whitespace-nowrap transition-colors"
+                  className="block whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium text-white/90 transition-all duration-200 hover:bg-white/10 hover:text-accent"
 
                 >
 

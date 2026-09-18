@@ -23,10 +23,35 @@ import {
   CreateAddressPayload,
   Order,
   Payment,
+  ProductFormPayload,
+  UploadedImage,
 } from './types';
 import { SESSION_STORAGE_KEY } from './constants';
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
+
+/**
+ * Resolve a base da API para uso no browser.
+ *
+ * Em desenvolvimento acessado por outro dispositivo da rede local (ex.:
+ * http://192.168.0.10:3001), `localhost` apontaria para o próprio celular e a
+ * requisição falharia. Quando NEXT_PUBLIC_API_URL não está definida, derivamos
+ * a URL do host atual da janela, mantendo porta e sufixo originais da API_URL
+ * (que é o padrão localhost:3000/api).
+ */
+export function resolveApiUrl(): string {
+  const envUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (envUrl) return envUrl;
+  if (typeof window === 'undefined') return API_URL;
+
+  try {
+    const base = new URL(API_URL);
+    base.hostname = window.location.hostname;
+    return base.toString().replace(/\/$/, '');
+  } catch {
+    return API_URL;
+  }
+}
 
 /** Origem do backend (sem o sufixo /api), para resolver URLs relativas de imagens */
 export const BACKEND_ORIGIN = (() => {
@@ -60,7 +85,9 @@ interface RequestOptions {
   signal?: AbortSignal;
     method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   headers?: Record<string, string>;
-  body?: string;
+  // FormData é usado no upload multipart: nunca definir Content-Type manualmente,
+  // o browser precisa gerar o boundary automaticamente.
+  body?: string | FormData;
 }
 
 export type ApiResult<T> =
@@ -86,15 +113,17 @@ class ApiClient {
     endpoint: string,
     opts: RequestOptions = {},
   ): Promise<ApiResult<T>> {
-    const url = `${API_URL}${endpoint}`;
+    const url = `${resolveApiUrl()}${endpoint}`;
     const timeout = opts.signal ? null : createTimeoutSignal(DEFAULT_TIMEOUT);
 
     try {
+      const isFormData = opts.body instanceof FormData;
+
       const response = await fetch(url, {
         method: opts.method ?? 'GET',
         headers: {
           Accept: 'application/json',
-          ...opts.headers,
+          ...(isFormData ? {} : opts.headers),
         },
         body: opts.body,
         signal: opts.signal ?? timeout!.signal,
@@ -408,6 +437,16 @@ class ApiClient {
     });
   }
 
+  async deleteAddress(id: string, token?: string): Promise<ApiResult<null>> {
+    const resolved = this.resolveToken(token);
+    if (!resolved) return { ok: false, status: 401 };
+
+    return this.request<null>(`/addresses/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${resolved}` },
+    });
+  }
+
   async createOrder(
     addressId: string,
     notes?: string,
@@ -441,6 +480,88 @@ class ApiClient {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ orderId, method }),
+    });
+  }
+
+  /** ---------------- Admin: products ---------------- */
+
+  /**
+   * Envia um produto ao backend. Quando há imagem, usa multipart/form-data
+   * (campo `image`); caso contrário envia JSON puro.
+   */
+  private async submitProduct(
+    endpoint: string,
+    method: 'POST' | 'PATCH',
+    payload: ProductFormPayload,
+    token?: string,
+  ): Promise<ApiResult<Product>> {
+    const resolved = this.resolveToken(token);
+    if (!resolved) return { ok: false, status: 401 };
+
+    const { image, ...fields } = payload;
+
+    if (!image) {
+      return this.request<Product>(endpoint, {
+        method,
+        headers: {
+          Authorization: `Bearer ${resolved}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(fields),
+      });
+    }
+
+    const form = new FormData();
+    for (const [key, value] of Object.entries(fields)) {
+      if (value !== undefined && value !== null) form.append(key, String(value));
+    }
+    form.append('image', image, image.name || 'product-image.jpg');
+
+    return this.request<Product>(endpoint, {
+      method,
+      headers: { Authorization: `Bearer ${resolved}` },
+      body: form,
+    });
+  }
+
+  async createProduct(
+    payload: ProductFormPayload,
+    token?: string,
+  ): Promise<ApiResult<Product>> {
+    return this.submitProduct('/products', 'POST', payload, token);
+  }
+
+  async updateProduct(
+    id: string,
+    payload: ProductFormPayload,
+    token?: string,
+  ): Promise<ApiResult<Product>> {
+    return this.submitProduct(
+      `/products/${encodeURIComponent(id)}`,
+      'PATCH',
+      payload,
+      token,
+    );
+  }
+
+  /**
+   * Envia uma URL de imagem remota ao backend, que baixa o arquivo e devolve
+   * a rota estática local (ex.: /uploads/123-abc.jpg).
+   */
+  async uploadImageFromUrl(
+    imageUrl: string,
+    token?: string,
+  ): Promise<ApiResult<UploadedImage>> {
+    const resolved = this.resolveToken(token);
+    if (!resolved) return { ok: false, status: 401 };
+
+    return this.request<UploadedImage>('/products/upload-url', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${resolved}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ imageUrl }),
     });
   }
 

@@ -4,6 +4,8 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { Button } from '@/components/ui/Button';
+import { inputClassName } from '@/components/ui/Input';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -68,7 +70,7 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-muted">
-      <div className="max-w-md w-full space-y-8">
+      <div className="w-full max-w-md space-y-8 rounded-xl border border-border bg-card p-8 shadow-sm">
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-foreground">
             Criar nova conta
@@ -100,7 +102,7 @@ export default function RegisterPage() {
                 required
                 value={formData.name}
                 onChange={handleChange}
-                className="appearance-none relative block w-full px-3 py-2 border border-border rounded-lg placeholder-muted-foreground text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                className={inputClassName}
                 placeholder="Seu nome"
               />
             </div>
@@ -117,7 +119,7 @@ export default function RegisterPage() {
                 required
                 value={formData.email}
                 onChange={handleChange}
-                className="appearance-none relative block w-full px-3 py-2 border border-border rounded-lg placeholder-muted-foreground text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                className={inputClassName}
                 placeholder="seu@email.com"
               />
             </div>
@@ -132,7 +134,7 @@ export default function RegisterPage() {
                 type="tel"
                 value={formData.phone}
                 onChange={handleChange}
-                className="appearance-none relative block w-full px-3 py-2 border border-border rounded-lg placeholder-muted-foreground text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                className={inputClassName}
                 placeholder="(11) 99999-9999"
               />
             </div>
@@ -147,7 +149,7 @@ export default function RegisterPage() {
                 type="text"
                 value={formData.cpf}
                 onChange={handleChange}
-                className="appearance-none relative block w-full px-3 py-2 border border-border rounded-lg placeholder-muted-foreground text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                className={inputClassName}
                 placeholder="000.000.000-00"
               />
             </div>
@@ -164,7 +166,7 @@ export default function RegisterPage() {
                 required
                 value={formData.password}
                 onChange={handleChange}
-                className="appearance-none relative block w-full px-3 py-2 border border-border rounded-lg placeholder-muted-foreground text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                className={inputClassName}
                 placeholder="••••••••"
               />
             </div>
@@ -181,20 +183,20 @@ export default function RegisterPage() {
                 required
                 value={formData.confirmPassword}
                 onChange={handleChange}
-                className="appearance-none relative block w-full px-3 py-2 border border-border rounded-lg placeholder-muted-foreground text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                className={inputClassName}
                 placeholder="••••••••"
               />
             </div>
           </div>
 
           <div>
-            <button
+            <Button
               type="submit"
               disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-primary hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full"
             >
               {loading ? 'Criando conta...' : 'Criar conta'}
-            </button>
+            </Button>
           </div>
 
           <div className="text-center">

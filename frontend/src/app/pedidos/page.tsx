@@ -109,7 +109,7 @@ function OrderCard({ order }: { order: Order }) {
 
   return (
     <>
-      <div className="rounded-2xl border border-border bg-background p-5 md:p-6">
+      <div className="rounded-2xl border border-input bg-card p-5 md:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <div className="flex items-center gap-3">
@@ -277,7 +277,7 @@ export default function OrdersPage() {
   }, [isAuthenticated]);
 
   if (authLoading || loading) {
-    return <LoadingState message="Carregando seus pedidos..." className="min-h-[500px]" />;
+    return <LoadingState message="Carregando seus pedidos..." className="min-h-125" />;
   }
 
   if (!isAuthenticated) {

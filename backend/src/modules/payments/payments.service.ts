@@ -255,7 +255,7 @@ export class PaymentsService {
       ? [
           { order: { id: referenceValue } },
           ...(Number.isFinite(referenceNumber) && referenceNumber > 0
-            ? [{ order: { number: referenceNumber }]
+            ? [{ order: { number: referenceNumber }}]
             : []),
         ]
       : [];

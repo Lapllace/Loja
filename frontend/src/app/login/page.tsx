@@ -4,6 +4,8 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { Button } from '@/components/ui/Button';
+import { inputClassName } from '@/components/ui/Input';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -37,7 +39,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-muted">
-      <div className="max-w-md w-full space-y-8">
+      <div className="w-full max-w-md space-y-8 rounded-xl border border-border bg-card p-8 shadow-sm">
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-foreground">
             Entrar na sua conta
@@ -70,7 +72,7 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="appearance-none relative block w-full px-3 py-2 border border-border rounded-lg placeholder-muted-foreground text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                className={inputClassName}
                 placeholder="seu@email.com"
               />
             </div>
@@ -87,20 +89,20 @@ export default function LoginPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="appearance-none relative block w-full px-3 py-2 border border-border rounded-lg placeholder-muted-foreground text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                className={inputClassName}
                 placeholder="••••••••"
               />
             </div>
           </div>
 
           <div>
-            <button
+            <Button
               type="submit"
               disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-primary hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full"
             >
               {loading ? 'Entrando...' : 'Entrar'}
-            </button>
+            </Button>
           </div>
 
           <div className="text-center">

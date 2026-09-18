@@ -145,31 +145,36 @@ export default async function ProductPage({ params }: PageProps) {
               </span>
             </div>
 
-            {/* Descrições */}
             {product.shortDescription && (
-              <p className="text-muted-foreground leading-relaxed">
-                {product.shortDescription}
-              </p>
+              <p className="leading-relaxed text-muted-foreground">{product.shortDescription}</p>
             )}
 
-            {product.description && (
-              <div>
-                <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide mb-2">
-                  Descrição
-                </h2>
-                <p className="text-muted-foreground whitespace-pre-line leading-relaxed">
-                  {product.description}
+            <div className="divide-y divide-border rounded-xl border border-input">
+              <details open className="group/details p-4">
+                <summary className="cursor-pointer list-none font-semibold text-foreground marker:hidden">
+                  <span className="flex items-center justify-between gap-4">
+                    Descrição
+                    <span className="text-accent transition-transform group-open/details:rotate-45" aria-hidden="true">+</span>
+                  </span>
+                </summary>
+                <p className="mt-3 whitespace-pre-line leading-relaxed text-muted-foreground">
+                  {product.description || 'Detalhes do produto disponíveis em breve.'}
                 </p>
-              </div>
-            )}
-
-            {/* Marca */}
-            {product.brand && (
-              <div className="text-sm">
-                <span className="text-muted-foreground">Marca: </span>
-                <span className="text-foreground font-medium">{product.brand.name}</span>
-              </div>
-            )}
+              </details>
+              <details className="group/details p-4">
+                <summary className="cursor-pointer list-none font-semibold text-foreground marker:hidden">
+                  <span className="flex items-center justify-between gap-4">
+                    Especificações
+                    <span className="text-accent transition-transform group-open/details:rotate-45" aria-hidden="true">+</span>
+                  </span>
+                </summary>
+                <dl className="mt-3 space-y-2 text-sm">
+                  <div className="flex justify-between gap-4"><dt className="text-muted-foreground">SKU</dt><dd className="font-medium text-foreground">{product.sku}</dd></div>
+                  {product.category && <div className="flex justify-between gap-4"><dt className="text-muted-foreground">Categoria</dt><dd className="font-medium text-foreground">{product.category.name}</dd></div>}
+                  {product.brand && <div className="flex justify-between gap-4"><dt className="text-muted-foreground">Marca</dt><dd className="font-medium text-foreground">{product.brand.name}</dd></div>}
+                </dl>
+              </details>
+            </div>
 
             {/* Ações (client) */}
             <ProductActions productId={product.id} stock={product.stock} />

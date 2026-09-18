@@ -40,7 +40,7 @@ export function CartItemRow({ item, onChange, onRemove, updating }: CartItemRowP
   return (
     <li className="flex items-center gap-4 py-5 first:pt-0 last:border-0 last:pb-0 border-b border-border">
       {/* Imagem */}
-      <div className="relative flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden bg-muted">
+      <div className="relative shrink-0 w-20 h-20 rounded-lg overflow-hidden bg-muted">
         <SafeImage
           src={item.imageUrl}
           alt={item.name ?? 'Produto'}
@@ -70,13 +70,13 @@ export function CartItemRow({ item, onChange, onRemove, updating }: CartItemRowP
       </div>
 
       {/* Quantidade */}
-      <div className="flex-shrink-0 flex items-center gap-2">
+      <div className="shrink-0 flex items-center gap-2">
         <button
           type="button"
           aria-label="Reduzir"
           disabled={updating || stock === 0}
           onClick={() => step(-1)}
-          className="w-8 h-8 inline-flex items-center justify-center rounded-lg border border-border text-sm font-semibold hover:bg-muted disabled:opacity-50"
+          className="inline-flex size-8 items-center justify-center rounded-full border border-input text-sm font-semibold transition-colors hover:border-accent hover:bg-accent/10 disabled:opacity-50"
         >
           −
         </button>
@@ -91,21 +91,21 @@ export function CartItemRow({ item, onChange, onRemove, updating }: CartItemRowP
             if (e.key === 'Enter') commit(Number(e.currentTarget.value));
           }}
           disabled={updating || stock === 0}
-          className="w-11 h-8 text-center text-sm font-semibold border border-border rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="h-8 w-11 rounded-lg border border-input bg-background text-center text-sm font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
         <button
           type="button"
           aria-label="Aumentar"
           disabled={updating || stock === 0}
           onClick={() => step(1)}
-          className="w-8 h-8 inline-flex items-center justify-center rounded-lg border border-border text-sm font-semibold hover:bg-muted disabled:opacity-50"
+          className="inline-flex size-8 items-center justify-center rounded-full border border-input text-sm font-semibold transition-colors hover:border-accent hover:bg-accent/10 disabled:opacity-50"
         >
           +
         </button>
       </div>
 
       {/* Subtotal */}
-      <div className="flex-shrink-0 w-32 text-right">
+      <div className="shrink-0 w-32 text-right">
         <PriceFormatter price={toNumber(item.price) ? toNumber(item.price)! * item.quantity : null} />
       </div>
 
@@ -115,7 +115,7 @@ export function CartItemRow({ item, onChange, onRemove, updating }: CartItemRowP
         aria-label="Remover"
         disabled={updating}
         onClick={onRemove}
-        className="flex-shrink-0 p-2 rounded-lg text-error hover:bg-error/10 transition-colors disabled:opacity-50"
+        className="shrink-0 p-2 rounded-lg text-error hover:bg-error/10 transition-colors disabled:opacity-50"
         title="Remover do carrinho"
       >
         ✕

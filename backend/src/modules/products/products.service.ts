@@ -4,6 +4,7 @@ import {
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -13,7 +14,12 @@ import { QueryProductDto } from './dto/query-product.dto';
 export class ProductsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(data: CreateProductDto) {
+  /**
+   * @param data     Campos do produto.
+   * @param imageUrls URLs estáticas das imagens enviadas por upload
+   *                  (a primeira vira a imagem principal).
+   */
+  async create(data: CreateProductDto, imageUrls: string[] = []) {
     const category = await this.prisma.category.findUnique({
       where: { id: data.categoryId },
     });
@@ -50,6 +56,15 @@ export class ProductsService {
           length: data.length,
           categoryId: data.categoryId,
           brandId: data.brandId,
+          ...(imageUrls.length > 0 && {
+            images: {
+              create: imageUrls.map((url, index) => ({
+                url,
+                alt: data.name,
+                position: index,
+              })),
+            },
+          }),
         },
         select: {
           id: true,
@@ -72,6 +87,17 @@ export class ProductsService {
           brandId: true,
           createdAt: true,
           updatedAt: true,
+          images: {
+            orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
+            select: {
+              id: true,
+              url: true,
+              alt: true,
+              position: true,
+              productId: true,
+              createdAt: true,
+            },
+          },
         },
       });
       return product;
@@ -270,7 +296,11 @@ export class ProductsService {
     return product;
   }
 
-  async update(id: string, data: UpdateProductDto) {
+  /**
+   * @param imageUrls Quando enviadas, substituem as imagens atuais do produto
+   *                  (a primeira passa a ser a imagem principal).
+   */
+  async update(id: string, data: UpdateProductDto, imageUrls: string[] = []) {
     if (data.categoryId !== undefined) {
       const category = await this.prisma.category.findUnique({
         where: { id: data.categoryId },
@@ -291,7 +321,7 @@ export class ProductsService {
       }
     }
 
-    const updateData: any = {};
+    const updateData: Prisma.ProductUpdateInput = {};
     if (data.sku !== undefined) updateData.sku = data.sku;
     if (data.name !== undefined) updateData.name = data.name;
     if (data.slug !== undefined) updateData.slug = data.slug;
@@ -310,8 +340,27 @@ export class ProductsService {
     if (data.width !== undefined) updateData.width = data.width;
     if (data.height !== undefined) updateData.height = data.height;
     if (data.length !== undefined) updateData.length = data.length;
-    if (data.categoryId !== undefined) updateData.categoryId = data.categoryId;
-    if (data.brandId !== undefined) updateData.brandId = data.brandId;
+    // FKs escalares nao existem em ProductUpdateInput: usa-se connect.
+    if (data.categoryId !== undefined) {
+      updateData.category = { connect: { id: data.categoryId } };
+    }
+    if (data.brandId !== undefined) {
+      updateData.brand = data.brandId
+        ? { connect: { id: data.brandId } }
+        : { disconnect: true };
+    }
+
+    // Novas imagens substituem as anteriores (delete + create em transação).
+    if (imageUrls.length > 0) {
+      updateData.images = {
+        deleteMany: {},
+        create: imageUrls.map((url, index) => ({
+          url,
+          alt: data.name ?? undefined,
+          position: index,
+        })),
+      };
+    }
 
     try {
       const product = await this.prisma.product.update({
@@ -337,6 +386,17 @@ export class ProductsService {
           brandId: true,
           createdAt: true,
           updatedAt: true,
+          images: {
+            orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
+            select: {
+              id: true,
+              url: true,
+              alt: true,
+              position: true,
+              productId: true,
+              createdAt: true,
+            },
+          },
         },
       });
       return product;

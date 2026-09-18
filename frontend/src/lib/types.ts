@@ -255,3 +255,29 @@ export interface UpdateCartItemPayload {
 export type CartMutationResult =
   | { ok: true; cart: Cart }
   | { ok: false; status: number; message?: string };
+/** Imagem salva pelo backend em /uploads. */
+export interface UploadedImage {
+  /** Rota estática pública, ex.: /uploads/1712345678-ab12cd34.jpg */
+  url: string;
+  fileName: string;
+  size: number;
+}
+
+/** Campos do formulário de produto no painel administrativo. */
+export interface ProductFormPayload {
+  sku: string;
+  name: string;
+  slug: string;
+  description?: string;
+  shortDescription?: string;
+  price: number;
+  comparePrice?: number;
+  costPrice?: number;
+  stock: number;
+  categoryId: string;
+  brandId?: string;
+  active?: boolean;
+  featured?: boolean;
+  /** Arquivo da imagem principal (opcional quando já há uma URL). */
+  image?: File | null;
+}

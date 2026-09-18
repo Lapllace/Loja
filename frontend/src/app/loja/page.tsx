@@ -4,6 +4,7 @@ import { api } from '@/lib/api';
 import { CategoryCard } from '@/components/category/CategoryCard';
 import { ProductGrid } from '@/components/product/ProductGrid';
 import { Button } from '@/components/ui/Button';
+import { BenefitsSection } from '@/components/sections/BenefitsSection';
 
 export const metadata: Metadata = {
   title: 'Início',
@@ -17,10 +18,10 @@ export const revalidate = 60;
 
 export default async function LojaHomePage() {
   // Chamadas em paralelo para evitar waterfall
-  const [categories, featuredProducts] = await Promise.all([
+  const [categories, bestSellers] = await Promise.all([
     api.getActiveCategories({ next: { revalidate: 300, tags: ['categories'] } }),
     api.getProducts(
-      { featured: true, active: true, inStock: true },
+      { active: true, inStock: true },
       { field: 'createdAt', order: 'desc' },
       { next: { revalidate: 60, tags: ['products'] } },
     ),
@@ -28,43 +29,82 @@ export default async function LojaHomePage() {
 
   return (
     <div>
-      {/* Hero */}
-      <section className="bg-ink text-white">
-        <div className="container-custom py-16 md:py-24">
-          <div className="max-w-2xl">
-            <p className="text-accent text-sm font-semibold uppercase tracking-[0.2em] mb-4">
-              Produtos importados
-            </p>
-            <h1 className="text-4xl md:text-5xl font-bold leading-tight mb-5 text-balance">
-              Bem-vindo à Gil Imports
+      <section className="relative overflow-hidden bg-ink py-12 text-white md:py-16">
+        <div className="container-custom">
+          <div className="max-w-3xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">Gil Imports</p>
+            <h1 className="mt-4 text-4xl font-bold leading-tight md:text-6xl">
+              Tecnologia e estilo para o seu dia a dia.
             </h1>
-            <p className="text-lg md:text-xl text-white/75 mb-8 leading-relaxed">
-              Acessórios para celular, fones, caixas de som, smartwatches, garrafas
-              térmicas e perfumes árabes selecionados com qualidade garantida.
+            <p className="mt-5 max-w-2xl text-base leading-relaxed text-white/70 md:text-lg">
+              Acessórios, eletrônicos e produtos importados selecionados com cuidado para você comprar com confiança.
             </p>
-            <div className="flex flex-wrap gap-4">
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link href="/loja/produtos">
-                <Button size="lg">Ver produtos</Button>
+                <Button size="lg">Explorar Catálogo</Button>
               </Link>
-              <Link href="/loja/produtos?featured=true">
-                <Button variant="outline" size="lg" className="border-accent text-accent hover:bg-accent hover:text-ink">
-                  Destaques
-                </Button>
-              </Link>
+              <a
+                href="https://wa.me/?text=Olá%20Gil%20Imports"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-12 items-center justify-center rounded-lg border border-white/20 px-7 text-base font-semibold text-white transition-all duration-200 hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                Falar no WhatsApp
+              </a>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Categorias */}
-      <section className="py-12 md:py-16">
+      {/* Mais Vendidos e Procurados */}
+      <section className="bg-muted/60 py-14 md:py-20">
         <div className="container-custom">
-          <div className="flex items-end justify-between mb-8">
+          <div className="mb-8 flex items-end justify-between gap-4 md:mb-10">
             <div>
-              <h2 className="text-2xl md:text-3xl font-bold text-foreground">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Seleção da loja</p>
+              <h2 className="mt-2 text-2xl font-bold text-foreground md:text-3xl">
+                Mais Vendidos e Procurados
+              </h2>
+              <p className="mt-2 text-muted-foreground">
+                Os favoritos da nossa loja, prontos para envio
+              </p>
+            </div>
+            <Link href="/loja/produtos" className="hidden sm:block shrink-0">
+              <Button variant="ghost" size="sm">
+                Ver todos os produtos
+              </Button>
+            </Link>
+          </div>
+
+          <ProductGrid
+            products={bestSellers}
+            columns={4}
+            emptyTitle="Nenhum produto disponível"
+            emptyDescription="Em breve traremos novidades para você."
+          />
+
+          <div className="mt-8 sm:hidden">
+            <Link href="/loja/produtos">
+              <Button variant="outline" className="w-full">
+                Ver todos os produtos
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      <BenefitsSection />
+
+      {/* Categorias */}
+      <section className="py-14 md:py-20">
+        <div className="container-custom">
+          <div className="mb-10 flex items-end justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Encontre seu próximo favorito</p>
+              <h2 className="mt-2 text-2xl font-bold text-foreground md:text-3xl">
                 Categorias
               </h2>
-              <p className="text-muted-foreground mt-1">
+              <p className="mt-2 text-muted-foreground">
                 Explore por tipo de produto
               </p>
             </div>
@@ -81,34 +121,6 @@ export default async function LojaHomePage() {
               ))}
             </div>
           )}
-        </div>
-      </section>
-
-      {/* Destaques */}
-      <section className="py-12 md:py-16 bg-muted/60">
-        <div className="container-custom">
-          <div className="flex items-end justify-between mb-8">
-            <div>
-              <h2 className="text-2xl md:text-3xl font-bold text-foreground">
-                Em destaque
-              </h2>
-              <p className="text-muted-foreground mt-1">
-                Seleção especial da semana
-              </p>
-            </div>
-            <Link href="/loja/produtos?featured=true" className="hidden sm:block">
-              <Button variant="ghost" size="sm">
-                Ver todos
-              </Button>
-            </Link>
-          </div>
-
-          <ProductGrid
-            products={featuredProducts}
-            columns={3}
-            emptyTitle="Nenhum produto em destaque"
-            emptyDescription="Em breve traremos novidades para você."
-          />
         </div>
       </section>
 

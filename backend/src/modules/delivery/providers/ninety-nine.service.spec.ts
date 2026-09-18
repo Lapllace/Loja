@@ -6,8 +6,13 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { NinetyNineService } from './ninety-nine.service';
+import {
+  NinetyNineService,
+  NinetyNineQuoteRequest,
+} from './ninety-nine.service';
 import { DeliveryStatus } from '@prisma/client';
+
+type QuoteAddress = NinetyNineQuoteRequest['pickup']['address'];
 
 describe('NinetyNineService', () => {
   let service: NinetyNineService;
@@ -37,8 +42,8 @@ describe('NinetyNineService', () => {
 
       await expect(
         service.quoteDelivery({
-          pickup: { address: {} },
-          dropoff: { address: {} },
+          pickup: { address: {} as unknown as QuoteAddress },
+          dropoff: { address: {} as unknown as QuoteAddress },
           items: [],
         }),
       ).rejects.toThrow(ServiceUnavailableException);
@@ -160,8 +165,8 @@ describe('NinetyNineService', () => {
     it('should throw error when pickup address is missing', async () => {
       await expect(
         service.quoteDelivery({
-          pickup: { address: null },
-          dropoff: { address: {} },
+          pickup: { address: null as unknown as QuoteAddress },
+          dropoff: { address: {} as unknown as QuoteAddress },
           items: [],
         }),
       ).rejects.toThrow(BadRequestException);
@@ -170,8 +175,8 @@ describe('NinetyNineService', () => {
     it('should throw error when dropoff address is missing', async () => {
       await expect(
         service.quoteDelivery({
-          pickup: { address: {} },
-          dropoff: { address: null },
+          pickup: { address: {} as unknown as QuoteAddress },
+          dropoff: { address: null as unknown as QuoteAddress },
           items: [],
         }),
       ).rejects.toThrow(BadRequestException);
@@ -180,8 +185,12 @@ describe('NinetyNineService', () => {
     it('should throw error when coordinates are missing', async () => {
       await expect(
         service.quoteDelivery({
-          pickup: { address: { lat: null, lng: null } },
-          dropoff: { address: { lat: null, lng: null } },
+          pickup: {
+            address: { lat: null, lng: null } as unknown as QuoteAddress,
+          },
+          dropoff: {
+            address: { lat: null, lng: null } as unknown as QuoteAddress,
+          },
           items: [],
         }),
       ).rejects.toThrow(BadRequestException);
@@ -190,8 +199,15 @@ describe('NinetyNineService', () => {
     it('should throw error when items are missing', async () => {
       await expect(
         service.quoteDelivery({
-          pickup: { address: { lat: -23.5505, lng: -46.6333 } },
-          dropoff: { address: { lat: -23.551, lng: -46.634 } },
+          pickup: {
+            address: {
+              lat: -23.5505,
+              lng: -46.6333,
+            } as unknown as QuoteAddress,
+          },
+          dropoff: {
+            address: { lat: -23.551, lng: -46.634 } as unknown as QuoteAddress,
+          },
           items: [],
         }),
       ).rejects.toThrow(BadRequestException);
@@ -200,8 +216,15 @@ describe('NinetyNineService', () => {
     it('should throw error when items lack dimensions', async () => {
       await expect(
         service.quoteDelivery({
-          pickup: { address: { lat: -23.5505, lng: -46.6333 } },
-          dropoff: { address: { lat: -23.551, lng: -46.634 } },
+          pickup: {
+            address: {
+              lat: -23.5505,
+              lng: -46.6333,
+            } as unknown as QuoteAddress,
+          },
+          dropoff: {
+            address: { lat: -23.551, lng: -46.634 } as unknown as QuoteAddress,
+          },
           items: [
             {
               description: 'Test',

@@ -234,7 +234,7 @@ export function CartDrawer() {
 
         {/* Rodapé com resumo — só quando há itens */}
         {isAuthenticated && items.length > 0 && (
-          <footer className="border-t border-border p-5">
+          <footer className="border-t border-border bg-muted/30 p-5">
             <CartSummary
               cart={cart}
               onClear={() => void handleClear()}

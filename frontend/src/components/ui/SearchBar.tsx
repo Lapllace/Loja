@@ -32,7 +32,7 @@ export function SearchBar({ className = '' }: { className?: string }) {
         onChange={handleChange}
         placeholder="Buscar produtos..."
         aria-label="Buscar produtos"
-        className="w-full px-4 py-2.5 pl-11 border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+        className="w-full rounded-lg border-input bg-background py-2.5 pl-11 pr-4 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-200 outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
       />
       <svg
         className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground"

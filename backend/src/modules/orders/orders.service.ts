@@ -21,8 +21,10 @@ import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 type OrderWithItems = Order & { items: OrderItem[] };
 type SerializedUser = { id: string; role: UserRole };
 
+type CartItem = { productId: string; quantity: number };
+
 type ValidatedOrderItem = {
-  cartItem: OrderItem;
+  cartItem: CartItem;
   product: Product;
   itemTotal: Prisma.Decimal;
 };
@@ -48,7 +50,10 @@ export class OrdersService {
     return base;
   }
 
-  private serializeOrder(order: OrderWithItems, user: SerializedUser) {
+  private serializeOrder(
+    order: OrderWithItems,
+    user: Pick<SerializedUser, 'role'>,
+  ) {
     const includeCostPrice = user.role === UserRole.OWNER;
     return {
       id: order.id,
@@ -80,7 +85,7 @@ export class OrdersService {
 
   private async validateCartItems(
     tx: Prisma.TransactionClient,
-    cartItems: OrderItem[],
+    cartItems: CartItem[],
   ) {
     const validatedItems: ValidatedOrderItem[] = [];
     let subtotal = new Prisma.Decimal(0);
@@ -152,7 +157,7 @@ export class OrdersService {
           productSku: product.sku,
           quantity,
           price: product.price,
-          costPrice: product.costPrice,
+          costPrice: new Prisma.Decimal(product.costPrice!.toString()),
           total: itemTotal,
         },
       });

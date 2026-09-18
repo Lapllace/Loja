@@ -47,10 +47,10 @@ export function ProductGallery({ images, productName }: ProductGalleryProps) {
               type="button"
               onClick={() => setSelectedId(image.id)}
               aria-label={`Ver imagem: ${image.alt || productName}`}
-              className={`relative aspect-square bg-muted rounded-lg overflow-hidden border-2 transition-colors ${
+              className={`relative aspect-square overflow-hidden rounded-lg border border-input bg-muted transition-all ${
                 selected?.id === image.id
-                  ? 'border-accent'
-                  : 'border-transparent hover:border-border'
+                  ? 'ring-2 ring-accent'
+                  : 'hover:border-accent/50'
               }`}
             >
               <SafeImage

@@ -11,6 +11,7 @@ import { toNumber } from '@/lib/utils';
 import { PriceFormatter } from '@/components/ui/PriceFormatter';
 import { LoadingState } from '@/components/ui/LoadingState';
 import { Button } from '@/components/ui/Button';
+import { inputClassName } from '@/components/ui/Input';
 
 type PaymentChoice = Payment['method'];
 type AddressForm = Omit<CreateAddressPayload, 'type' | 'isDefault'>;
@@ -69,7 +70,7 @@ function Field({
         required={required}
         maxLength={maxLength}
         inputMode={inputMode}
-        className="w-full rounded-lg border border-border bg-background px-3.5 py-2.5 text-sm text-foreground outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20"
+        className={inputClassName}
       />
     </label>
   );
@@ -221,7 +222,7 @@ export default function CheckoutPage() {
   };
 
   if (authLoading || (cartLoading && !initialized) || (isAuthenticated && loadingAddresses)) {
-    return <LoadingState message="Preparando seu checkout..." className="min-h-[500px]" />;
+    return <LoadingState message="Preparando seu checkout..." className="min-h-125" />;
   }
 
   if (!isAuthenticated) {
@@ -324,7 +325,7 @@ export default function CheckoutPage() {
 
       <form onSubmit={submit} className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_380px]">
         <div className="space-y-6">
-          <section className="rounded-2xl border border-border bg-background p-5 md:p-7">
+          <section className="rounded-2xl border border-input bg-card p-5 md:p-7">
             <div className="mb-5 flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-xl font-bold text-foreground">Endereço de entrega</h2>
@@ -374,7 +375,7 @@ export default function CheckoutPage() {
             <h2 className="text-xl font-bold text-foreground">Forma de pagamento</h2>
             <div className="mt-5 grid gap-3">
               {paymentOptions.map((option) => (
-                <label key={option.value} className={`flex items-center gap-3 rounded-xl border p-4 ${option.available ? 'cursor-pointer hover:border-accent/60' : 'cursor-not-allowed opacity-55'} ${payment === option.value ? 'border-accent bg-accent/5' : 'border-border'}`}>
+                  <label key={option.value} className={`flex items-center gap-3 rounded-xl border p-4 ${option.available ? 'cursor-pointer hover:border-accent/60' : 'cursor-not-allowed opacity-50'} ${payment === option.value ? 'border-accent bg-accent/5' : 'border-input'}`}>
                   <input type="radio" name="payment" value={option.value} checked={payment === option.value} onChange={() => option.available && setPayment(option.value)} disabled={!option.available} className="h-4 w-4 accent-[#c9a227]" />
                   <span className="flex-1"><span className="block font-semibold text-foreground">{option.label}</span><span className="block text-sm text-muted-foreground">{option.description}</span></span>
                 </label>
@@ -382,19 +383,19 @@ export default function CheckoutPage() {
             </div>
           </section>
 
-          <section className="rounded-2xl border border-border bg-background p-5 md:p-7">
-            <label className="block"><span className="text-sm font-semibold text-foreground">Observações do pedido <span className="font-normal text-muted-foreground">(opcional)</span></span><textarea value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={500} rows={3} className="mt-2 w-full resize-y rounded-lg border border-border px-3.5 py-2.5 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20" /></label>
+          <section className="rounded-2xl border border-input bg-card p-5 md:p-7">
+            <label className="block"><span className="text-sm font-semibold text-foreground">Observações do pedido <span className="font-normal text-muted-foreground">(opcional)</span></span><textarea value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={500} rows={3} className={`${inputClassName} mt-2 resize-y`} /></label>
           </section>
         </div>
 
-        <aside className="h-fit rounded-2xl bg-ink p-6 text-white lg:sticky lg:top-6">
+        <aside className="h-fit rounded-2xl bg-muted/30 p-6 text-foreground lg:sticky lg:top-6">
           <h2 className="text-xl font-bold">Resumo da compra</h2>
-          <ul className="mt-5 space-y-4 border-b border-white/15 pb-5">
-            {items.map((item) => <li key={item.id ?? item.productId} className="flex justify-between gap-4 text-sm"><span className="text-white/75">{item.quantity}x {item.name ?? 'Produto'}</span><PriceFormatter price={(toNumber(item.price) ?? 0) * item.quantity} /></li>)}
+          <ul className="mt-5 space-y-4 border-b border-border pb-5">
+            {items.map((item) => <li key={item.id ?? item.productId} className="flex justify-between gap-4 text-sm"><span className="text-muted-foreground">{item.quantity}x {item.name ?? 'Produto'}</span><PriceFormatter price={(toNumber(item.price) ?? 0) * item.quantity} /></li>)}
           </ul>
-          <dl className="mt-5 space-y-2 text-sm"><div className="flex justify-between"><dt className="text-white/65">Subtotal</dt><dd><PriceFormatter price={subtotal} /></dd></div><div className="flex justify-between"><dt className="text-white/65">Frete</dt><dd><PriceFormatter price={shipping} /></dd></div><div className="mt-4 flex justify-between border-t border-white/15 pt-4 text-lg font-bold"><dt>Total</dt><dd className="text-accent"><PriceFormatter price={total} /></dd></div></dl>
+          <dl className="mt-5 space-y-2 text-sm"><div className="flex justify-between"><dt className="text-muted-foreground">Subtotal</dt><dd><PriceFormatter price={subtotal} /></dd></div><div className="flex justify-between"><dt className="text-muted-foreground">Frete</dt><dd><PriceFormatter price={shipping} /></dd></div><div className="mt-4 flex justify-between border-t border-border pt-4 text-lg font-bold"><dt>Total</dt><dd className="text-accent"><PriceFormatter price={total} /></dd></div></dl>
           <Button type="submit" size="lg" className="mt-7 w-full" disabled={submitting || payment !== 'PIX'}>{submitting ? 'Processando pedido...' : 'Confirmar pedido'}</Button>
-          <p className="mt-3 text-center text-xs text-white/55">O estoque é validado no momento da confirmação.</p>
+          <p className="mt-3 text-center text-xs text-muted-foreground">O estoque é validado no momento da confirmação.</p>
         </aside>
       </form>
     </main>
