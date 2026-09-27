@@ -171,12 +171,15 @@ export interface OrderItem {
 export interface Order {
   id: string;
   number: string;
+  userId?: string;
   status: string;
   subtotal: number | string;
   shipping: number | string;
   discount: number | string;
   total: number | string;
+  notes?: string | null;
   createdAt: string;
+  updatedAt: string;
   items?: OrderItem[];
   address?: {
     recipient: string;
@@ -255,12 +258,153 @@ export interface UpdateCartItemPayload {
 export type CartMutationResult =
   | { ok: true; cart: Cart }
   | { ok: false; status: number; message?: string };
+
+/** ---------------- Image Search (OWNER) ---------------- */
+
+/** Entrada da busca: apenas o termo e obrigatorio. */
+export interface ImageSearchQuery {
+  query: string;
+  brand?: string;
+  model?: string;
+  volume?: string;
+  variant?: string;
+  category?: string;
+}
+
+/** Candidata retornada pela busca (nao baixada ainda). */
+export interface ImageCandidate {
+  id: string;
+  title: string;
+  source: string;
+  sourceUrl: string;
+  thumbnailUrl?: string;
+  imageUrl: string;
+  width?: number;
+  height?: number;
+  position?: number;
+  query: string;
+  score: number;
+}
+
+/** Resposta da busca de imagens. */
+export interface ImageSearchResult {
+  query: string;
+  queries: Array<{ text: string; reason: string }>;
+  candidates: ImageCandidate[];
+}
+
+/** Resposta do autocomplete (Google Autocomplete via SerpApi). */
+export interface ImageSuggestionsResult {
+  suggestions: string[];
+}
+
+/** Imagem escolhida pelo usuario no dialogo de busca. */
+export interface SelectedImageCandidate {
+  id: string;
+  title: string;
+  source: string;
+  sourceUrl: string;
+  imageUrl: string;
+  query: string;
+  /** Thumbnail para preview no formulario (nao vai ao backend). */
+  thumbnailUrl?: string;
+}
+
+/** Payload de importacao das imagens selecionadas para um produto. */
+export interface ImportSelectedImagesPayload {
+  productId: string;
+  name?: string;
+  brand?: string;
+  model?: string;
+  volume?: string;
+  variant?: string;
+  category?: string;
+  images: Array<{
+    id: string;
+    title: string;
+    source: string;
+    sourceUrl: string;
+    imageUrl: string;
+    thumbnailUrl?: string;
+    query: string;
+  }>;
+}
+
+/** Resultado da importacao (ProductImage criados). */
+export interface ImportedImagesResult {
+  product: { id: string; name: string; sku: string };
+  images: Array<{
+    id: string;
+    url: string;
+    alt: string | null;
+    position: number;
+  }>;
+  /** Contadores da importacao (uma imagem pode falhar sem abortar as outras). */
+  imported?: number;
+  failed?: number;
+  /** Resultado por imagem selecionada, para informar o OWNER o que falhou. */
+  results?: Array<
+    | { success: true; id: string; url?: string }
+    | { success: false; id: string; domain?: string; error?: string }
+  >;
+  manifestPath?: string;
+}
 /** Imagem salva pelo backend em /uploads. */
 export interface UploadedImage {
   /** Rota estática pública, ex.: /uploads/1712345678-ab12cd34.jpg */
   url: string;
   fileName: string;
   size: number;
+}
+
+// ---- Registros administrativos (listagens do painel) ----
+
+export interface AdminPayment {
+  id: string;
+  orderId: string;
+  method: 'PIX' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'BOLETO' | 'CASH';
+  source?: 'ONLINE' | 'PHYSICAL';
+  status: 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED';
+  amount: number | string;
+  transactionId?: string | null;
+  provider?: string | null;
+  paidAt?: string | null;
+  createdAt: string;
+  order?: { id: string; number: number; userId: string } | null;
+}
+
+export interface AdminDelivery {
+  id: string;
+  orderId: string;
+  method: 'PICKUP' | 'UBER' | 'NINENINE' | 'MANUAL';
+  provider: string;
+  status: string;
+  shippingCost: number | string;
+  trackingCode?: string | null;
+  trackingUrl?: string | null;
+  courierName?: string | null;
+  estimatedDelivery?: string | null;
+  createdAt: string;
+  order?: { id: string; number: number; userId: string } | null;
+}
+
+export interface PendingDeliveryAuthorization {
+  deliveryId: string;
+  orderId?: string;
+  orderNumber?: number;
+  destination?: { recipient?: string | null; city?: string | null; state?: string | null } | null;
+  [key: string]: unknown;
+}
+
+export interface AdminUser {
+  id: string;
+  name: string;
+  email: string;
+  cpf: string | null;
+  phone: string | null;
+  role: 'CUSTOMER' | 'ADMIN' | 'OWNER';
+  status: 'ACTIVE' | 'PENDING' | 'BLOCKED';
+  createdAt: string;
 }
 
 /** Campos do formulário de produto no painel administrativo. */
@@ -280,4 +424,6 @@ export interface ProductFormPayload {
   featured?: boolean;
   /** Arquivo da imagem principal (opcional quando já há uma URL). */
   image?: File | null;
+  /** Imagens adicionais do mesmo upload, limitadas pelo formulário a quatro. */
+  images?: File[];
 }

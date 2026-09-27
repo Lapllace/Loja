@@ -13,7 +13,8 @@ export const SESSION_KEY = SESSION_STORAGE_KEY;
 export function readStoredToken(): string | null {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
+    const raw = window.localStorage.getItem(SESSION_STORAGE_KEY)
+      ?? window.sessionStorage.getItem(SESSION_STORAGE_KEY);
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') return null;
@@ -36,6 +37,7 @@ export function hydrateSessionFromStorage(): void {
 
 export class AuthManager {
   private session: Session | null = null;
+  private storage: 'local' | 'session' = 'local';
   private listeners: Set<(session: Session | null) => void> = new Set();
 
   constructor() {
@@ -46,8 +48,10 @@ export class AuthManager {
     if (typeof window === 'undefined') return;
 
     try {
-      const stored = localStorage.getItem(SESSION_KEY);
+      const stored = localStorage.getItem(SESSION_KEY)
+        ?? sessionStorage.getItem(SESSION_KEY);
       if (stored) {
+        this.storage = localStorage.getItem(SESSION_KEY) ? 'local' : 'session';
         this.session = JSON.parse(stored);
         this.validateSession();
       }
@@ -63,9 +67,14 @@ export class AuthManager {
 
     try {
       if (this.session) {
-        localStorage.setItem(SESSION_KEY, JSON.stringify(this.session));
+        const serialized = JSON.stringify(this.session);
+        const target = this.storage === 'local' ? localStorage : sessionStorage;
+        target.setItem(SESSION_KEY, serialized);
+        const other = this.storage === 'local' ? sessionStorage : localStorage;
+        other.removeItem(SESSION_KEY);
       } else {
         localStorage.removeItem(SESSION_KEY);
+        sessionStorage.removeItem(SESSION_KEY);
       }
     } catch (error) {
       console.error('Failed to save session:', error);
@@ -116,7 +125,7 @@ export class AuthManager {
     return this.session?.token ?? readStoredToken();
   }
 
-  /** Relê 'auth_session' do localStorage e notifica os inscritos. */
+  /** Relê a sessão persistida e notifica os inscritos. */
   public reloadSession(): void {
     const previous = this.getToken();
     this.session = null;
@@ -132,7 +141,11 @@ export class AuthManager {
     return this.session === null && readStoredToken() !== null;
   }
 
-  public async login(email: string, password: string): Promise<{ success: boolean; error?: string }> {
+  public async login(
+    email: string,
+    password: string,
+    rememberMe = true,
+  ): Promise<{ success: boolean; error?: string }> {
     try {
       const response = await api.login({ email, password });
       
@@ -141,6 +154,7 @@ export class AuthManager {
           user: response.user,
           token: response.accessToken,
         };
+        this.storage = rememberMe ? 'local' : 'session';
         this.saveSession();
         this.notifyListeners();
         return { success: true };
@@ -162,6 +176,7 @@ export class AuthManager {
           user: response.user,
           token: response.accessToken,
         };
+        this.storage = 'local';
         this.saveSession();
         this.notifyListeners();
         return { success: true };

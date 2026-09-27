@@ -25,6 +25,15 @@ import {
   Payment,
   ProductFormPayload,
   UploadedImage,
+  ImageSearchQuery,
+  ImageSearchResult,
+  ImageSuggestionsResult,
+  ImportSelectedImagesPayload,
+  ImportedImagesResult,
+  AdminPayment,
+  AdminDelivery,
+  AdminUser,
+  PendingDeliveryAuthorization,
 } from './types';
 import { SESSION_STORAGE_KEY } from './constants';
 
@@ -119,12 +128,24 @@ class ApiClient {
     try {
       const isFormData = opts.body instanceof FormData;
 
+      // Para multipart, o browser precisa definir o `Content-Type` sozinho
+      // (ele inclui o `boundary`). Removemos APENAS esse header — os demais
+      // (Authorization, etc.) devem ser preservados. Descartar `opts.headers`
+      // inteiro aqui fazia o POST/PATCH multipart de produtos ir sem o token
+      // e o backend responder 401 "Unauthorized".
+      const headers: Record<string, string> = {
+        Accept: 'application/json',
+        ...opts.headers,
+      };
+      if (isFormData) {
+        for (const key of Object.keys(headers)) {
+          if (key.toLowerCase() === 'content-type') delete headers[key];
+        }
+      }
+
       const response = await fetch(url, {
         method: opts.method ?? 'GET',
-        headers: {
-          Accept: 'application/json',
-          ...(isFormData ? {} : opts.headers),
-        },
+        headers,
         body: opts.body,
         signal: opts.signal ?? timeout!.signal,
         // Only use next option for server-side requests
@@ -252,6 +273,51 @@ class ApiClient {
       opts,
     );
     return result.ok ? result.data : [];
+  }
+
+  async createProductImage(
+    productId: string,
+    payload: { url: string; alt?: string | null; position?: number },
+    token?: string,
+  ): Promise<ApiResult<ProductImage>> {
+    const resolved = this.resolveToken(token);
+    if (!resolved) return { ok: false, status: 401 };
+    return this.request<ProductImage>(`/products/${encodeURIComponent(productId)}/images`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${resolved}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateProductImage(
+    productId: string,
+    imageId: string,
+    payload: { url?: string; alt?: string | null; position?: number },
+    token?: string,
+  ): Promise<ApiResult<ProductImage>> {
+    const resolved = this.resolveToken(token);
+    if (!resolved) return { ok: false, status: 401 };
+    return this.request<ProductImage>(
+      `/products/${encodeURIComponent(productId)}/images/${encodeURIComponent(imageId)}`,
+      {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${resolved}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      },
+    );
+  }
+
+  async deleteProductImage(
+    productId: string,
+    imageId: string,
+    token?: string,
+  ): Promise<ApiResult<null>> {
+    const resolved = this.resolveToken(token);
+    if (!resolved) return { ok: false, status: 401 };
+    return this.request<null>(
+      `/products/${encodeURIComponent(productId)}/images/${encodeURIComponent(imageId)}`,
+      { method: 'DELETE', headers: { Authorization: `Bearer ${resolved}` } },
+    );
   }
 
   // ---------------- Authentication ----------------
@@ -498,9 +564,11 @@ class ApiClient {
     const resolved = this.resolveToken(token);
     if (!resolved) return { ok: false, status: 401 };
 
-    const { image, ...fields } = payload;
+    const { image, images = [], ...fields } = payload;
+    const primaryImage = image ?? images[0];
+    const additionalImages = image ? images : images.slice(1);
 
-    if (!image) {
+    if (!primaryImage) {
       return this.request<Product>(endpoint, {
         method,
         headers: {
@@ -515,7 +583,10 @@ class ApiClient {
     for (const [key, value] of Object.entries(fields)) {
       if (value !== undefined && value !== null) form.append(key, String(value));
     }
-    form.append('image', image, image.name || 'product-image.jpg');
+    form.append('image', primaryImage, primaryImage.name || 'product-image.jpg');
+    for (const additionalImage of additionalImages) {
+      form.append('images', additionalImage, additionalImage.name || 'product-image.jpg');
+    }
 
     return this.request<Product>(endpoint, {
       method,
@@ -565,12 +636,38 @@ class ApiClient {
     });
   }
 
+  async deleteProduct(
+    id: string,
+    token?: string,
+  ): Promise<ApiResult<null>> {
+    const resolved = this.resolveToken(token);
+    if (!resolved) return { ok: false, status: 401 };
+    return this.request<null>(`/products/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${resolved}` },
+    });
+  }
+
   async getOrders(token?: string): Promise<ApiResult<Order[]>> {
     const resolved = this.resolveToken(token);
     if (!resolved) return { ok: false, status: 401 };
 
     return this.request<Order[]>('/orders', {
       headers: { Authorization: `Bearer ${resolved}` },
+    });
+  }
+
+  async updateOrderStatus(
+    orderId: string,
+    data: { status: string },
+    token?: string,
+  ): Promise<ApiResult<Order>> {
+    const resolved = this.resolveToken(token);
+    if (!resolved) return { ok: false, status: 401 };
+    return this.request<Order>(`/orders/${encodeURIComponent(orderId)}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${resolved}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
     });
   }
 
@@ -585,17 +682,240 @@ class ApiClient {
       headers: { Authorization: `Bearer ${resolved}` },
     });
   }
+
+  // ---------------- Admin: categorias, marcas, pagamentos, entregas, usuários ----------------
+
+  async createCategory(
+    payload: { name: string; slug: string; description?: string; imageUrl?: string; parentId?: string; active?: boolean },
+    token?: string,
+  ): Promise<ApiResult<Category>> {
+    const resolved = this.resolveToken(token);
+    if (!resolved) return { ok: false, status: 401 };
+    return this.request<Category>('/categories', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${resolved}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateCategory(
+    id: string,
+    payload: { name?: string; slug?: string; description?: string | null; imageUrl?: string | null; parentId?: string | null; active?: boolean },
+    token?: string,
+  ): Promise<ApiResult<Category>> {
+    const resolved = this.resolveToken(token);
+    if (!resolved) return { ok: false, status: 401 };
+    return this.request<Category>(`/categories/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${resolved}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async deleteCategory(id: string, token?: string): Promise<ApiResult<null>> {
+    const resolved = this.resolveToken(token);
+    if (!resolved) return { ok: false, status: 401 };
+    return this.request<null>(`/categories/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${resolved}` },
+    });
+  }
+
+  async createBrand(
+    payload: { name: string; slug: string; description?: string; logoUrl?: string; website?: string; active?: boolean },
+    token?: string,
+  ): Promise<ApiResult<Brand>> {
+    const resolved = this.resolveToken(token);
+    if (!resolved) return { ok: false, status: 401 };
+    return this.request<Brand>('/brands', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${resolved}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateBrand(
+    id: string,
+    payload: { name?: string; slug?: string; description?: string | null; logoUrl?: string | null; website?: string | null; active?: boolean },
+    token?: string,
+  ): Promise<ApiResult<Brand>> {
+    const resolved = this.resolveToken(token);
+    if (!resolved) return { ok: false, status: 401 };
+    return this.request<Brand>(`/brands/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${resolved}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async deleteBrand(id: string, token?: string): Promise<ApiResult<null>> {
+    const resolved = this.resolveToken(token);
+    if (!resolved) return { ok: false, status: 401 };
+    return this.request<null>(`/brands/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${resolved}` },
+    });
+  }
+
+  async getPayments(opts: RequestOptions = {}): Promise<ApiResult<AdminPayment[]>> {
+    const resolved = this.resolveToken();
+    if (!resolved) return { ok: false, status: 401 };
+    return this.request<AdminPayment[]>('/payments', {
+      ...opts,
+      headers: { Authorization: `Bearer ${resolved}` },
+    });
+  }
+
+  async getDeliveries(opts: RequestOptions = {}): Promise<ApiResult<AdminDelivery[]>> {
+    const resolved = this.resolveToken();
+    if (!resolved) return { ok: false, status: 401 };
+    return this.request<AdminDelivery[]>('/deliveries', {
+      ...opts,
+      headers: { Authorization: `Bearer ${resolved}` },
+    });
+  }
+
+  async getPendingDeliveryAuthorizations(opts: RequestOptions = {}): Promise<ApiResult<PendingDeliveryAuthorization[]>> {
+    const resolved = this.resolveToken();
+    if (!resolved) return { ok: false, status: 401 };
+    return this.request<PendingDeliveryAuthorization[]>('/deliveries/pending-authorization', {
+      ...opts,
+      headers: { Authorization: `Bearer ${resolved}` },
+    });
+  }
+
+  async authorizeDelivery(id: string, token?: string): Promise<ApiResult<unknown>> {
+    const resolved = this.resolveToken(token);
+    if (!resolved) return { ok: false, status: 401 };
+    return this.request<unknown>(`/deliveries/${encodeURIComponent(id)}/authorize`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${resolved}` },
+    });
+  }
+
+  async updateDeliveryStatus(id: string, status: string, token?: string): Promise<ApiResult<unknown>> {
+    const resolved = this.resolveToken(token);
+    if (!resolved) return { ok: false, status: 401 };
+    return this.request<unknown>(`/deliveries/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${resolved}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    });
+  }
+
+  async getUsers(opts: RequestOptions = {}): Promise<ApiResult<AdminUser[]>> {
+    const resolved = this.resolveToken();
+    if (!resolved) return { ok: false, status: 401 };
+    return this.request<AdminUser[]>('/users', {
+      ...opts,
+      headers: { Authorization: `Bearer ${resolved}` },
+    });
+  }
+
+  async updateUserRoleStatus(
+    id: string,
+    payload: { role?: string; status?: string },
+    token?: string,
+  ): Promise<ApiResult<AdminUser>> {
+    const resolved = this.resolveToken(token);
+    if (!resolved) return { ok: false, status: 401 };
+    return this.request<AdminUser>(`/users/${encodeURIComponent(id)}/role-status`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${resolved}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async deleteUser(id: string, token?: string): Promise<ApiResult<null>> {
+    const resolved = this.resolveToken(token);
+    if (!resolved) return { ok: false, status: 401 };
+    return this.request<null>(`/users/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${resolved}` },
+    });
+  }
+
+  // ---------------- Image Search (OWNER) ----------------
+
+  /**
+   * Sugestoes de pesquisa (Google Autocomplete via SerpApi).
+   *
+   * SEPARADO de `searchImages`: autocomplete e leve e frequente, enquanto a
+   * busca de imagens e pesada. Retorna no maximo 3 sugestoes.
+   */
+  async suggestImages(
+    query: string,
+    token?: string,
+  ): Promise<ApiResult<ImageSuggestionsResult>> {
+    const resolved = this.resolveToken(token);
+    if (!resolved) return { ok: false, status: 401 };
+
+    const qs = new URLSearchParams({ q: query });
+    return this.request<ImageSuggestionsResult>(
+      `/developer/image-search/suggestions?${qs.toString()}`,
+      { headers: { Authorization: `Bearer ${resolved}` } },
+    );
+  }
+
+  /**
+   * Busca candidatas de imagem por termo livre.
+   *
+   * Nao envia `productId`: a busca ocorre antes de o produto existir.
+   */
+  async searchImages(
+    payload: ImageSearchQuery,
+    token?: string,
+  ): Promise<ApiResult<ImageSearchResult>> {
+    const resolved = this.resolveToken(token);
+    if (!resolved) return { ok: false, status: 401 };
+
+    return this.request<ImageSearchResult>('/developer/image-search/search', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${resolved}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  /**
+   * Importa imagens selecionadas para um produto existente.
+   *
+   * O backend baixa novamente as URLs e valida SSRF/MIME/magic bytes: a
+   * selecao feita no browser nao e confiavel.
+   */
+  async importSelectedImages(
+    payload: ImportSelectedImagesPayload,
+    token?: string,
+  ): Promise<ApiResult<ImportedImagesResult>> {
+    const resolved = this.resolveToken(token);
+    if (!resolved) return { ok: false, status: 401 };
+
+    return this.request<ImportedImagesResult>(
+      '/developer/image-search/import',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${resolved}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      },
+    );
+  }
 }
 
 /**
- * Lê o accessToken de 'auth_session' no localStorage.
+ * Lê o accessToken de 'auth_session' no localStorage ou sessionStorage.
  * Não depende de módulos com estado (authManager) para evitar ciclos de import
  * e para funcionar durante o primeiro paint do client.
  */
 export function readStoredAccessToken(): string | null {
   if (typeof window === 'undefined') return null;
   try {
-    const stored = window.localStorage.getItem(SESSION_STORAGE_KEY);
+    const stored = window.localStorage.getItem(SESSION_STORAGE_KEY)
+      ?? window.sessionStorage.getItem(SESSION_STORAGE_KEY);
     if (!stored) return null;
     const parsed: unknown = JSON.parse(stored);
     if (!isRecordLike(parsed)) return null;

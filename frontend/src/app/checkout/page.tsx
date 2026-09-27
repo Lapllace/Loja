@@ -12,6 +12,7 @@ import { PriceFormatter } from '@/components/ui/PriceFormatter';
 import { LoadingState } from '@/components/ui/LoadingState';
 import { Button } from '@/components/ui/Button';
 import { inputClassName } from '@/components/ui/Input';
+import { lookupCep } from '@/lib/cep';
 
 type PaymentChoice = Payment['method'];
 type AddressForm = Omit<CreateAddressPayload, 'type' | 'isDefault'>;
@@ -35,7 +36,8 @@ const paymentOptions: Array<{ value: PaymentChoice; label: string; description: 
 ];
 
 function statusMessage(status: number): string {
-  if (status === 401 || status === 403) return 'Sua sessão expirou. Entre novamente para continuar.';
+  if (status === 401) return 'Sua sessão expirou. Entre novamente para continuar.';
+  if (status === 403) return 'Sua conta não tem permissão para concluir esta operação.';
   if (status === 400) return 'Confira os dados informados e tente novamente.';
   if (status === 404) return 'O endereço ou o carrinho não foi encontrado.';
   return 'Não foi possível concluir o checkout. Tente novamente.';
@@ -50,6 +52,7 @@ function Field({
   className = '',
   maxLength,
   inputMode,
+  id,
 }: {
   label: string;
   name: keyof AddressForm;
@@ -59,11 +62,13 @@ function Field({
   className?: string;
   maxLength?: number;
   inputMode?: 'text' | 'numeric';
+  id?: string;
 }) {
   return (
     <label className={`block ${className}`}>
       <span className="mb-1.5 block text-sm font-semibold text-foreground">{label}</span>
       <input
+        id={id}
         name={name}
         value={value}
         onChange={(event) => onChange(name, event.target.value)}
@@ -160,6 +165,47 @@ export default function CheckoutPage() {
 
   const updateAddress = (name: keyof AddressForm, value: string) => {
     setAddress((current) => ({ ...current, [name]: value }));
+  };
+
+  const handleZipCodeChange = async (value: string) => {
+    const zipcode = value.replace(/\D/g, '').slice(0, 8);
+    updateAddress('zipcode', zipcode);
+    const data = await lookupCep(zipcode);
+    if (!data) return;
+    setAddress((current) => ({ ...current, ...data }));
+    document.getElementById('checkout-address-number')?.focus();
+  };
+
+  const saveNewAddress = async () => {
+    setError(null);
+    const payload: CreateAddressPayload = {
+      ...address,
+      recipient: address.recipient || user?.name || '',
+      zipcode: address.zipcode.replace(/\D/g, ''),
+      state: address.state.trim().toUpperCase(),
+      type: 'SHIPPING',
+      isDefault: addresses.length === 0,
+    };
+    if (!payload.recipient || !payload.street || !payload.number || !payload.city || !payload.district) {
+      setError('Preencha os dados obrigatórios do endereço.');
+      return;
+    }
+    if (payload.zipcode.length !== 8 || payload.state.length !== 2) {
+      setError('Informe um CEP com 8 dígitos e uma UF válida.');
+      return;
+    }
+
+    setSubmitting(true);
+    const addressResult = await api.createAddress(payload);
+    setSubmitting(false);
+    if (!addressResult.ok) {
+      setError(statusMessage(addressResult.status));
+      return;
+    }
+
+    setAddresses((current) => [...current, addressResult.data]);
+    setSelectedAddressId(addressResult.data.id);
+    setAddress(initialAddress);
   };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -359,14 +405,17 @@ export default function CheckoutPage() {
             {selectedAddressId === 'new' && (
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Recebedor" name="recipient" value={address.recipient} onChange={updateAddress} required className="sm:col-span-2" />
-                <Field label="CEP" name="zipcode" value={address.zipcode} onChange={updateAddress} required maxLength={9} inputMode="numeric" />
+                <Field label="CEP" name="zipcode" value={address.zipcode} onChange={(name, value) => name === 'zipcode' ? void handleZipCodeChange(value) : updateAddress(name, value)} required maxLength={8} inputMode="numeric" />
                 <Field label="Rua" name="street" value={address.street} onChange={updateAddress} required />
-                <Field label="Número" name="number" value={address.number} onChange={updateAddress} required />
+                <Field label="Número" name="number" value={address.number} onChange={updateAddress} required id="checkout-address-number" />
                 <Field label="Complemento" name="complement" value={address.complement ?? ''} onChange={updateAddress} />
                 <Field label="Bairro" name="district" value={address.district} onChange={updateAddress} required />
                 <Field label="Cidade" name="city" value={address.city} onChange={updateAddress} required />
                 <Field label="Estado (UF)" name="state" value={address.state} onChange={updateAddress} required maxLength={2} />
                 <Field label="Referência" name="reference" value={address.reference ?? ''} onChange={updateAddress} className="sm:col-span-2" />
+                <Button type="button" variant="outline" onClick={() => void saveNewAddress()} disabled={submitting} className="sm:col-span-2 sm:justify-self-start">
+                  {submitting ? 'Salvando endereço...' : 'Salvar endereço'}
+                </Button>
               </div>
             )}
           </section>

@@ -1,3 +1,4 @@
 {
-    "chat.disableAIFeatures": false
+    "chat.disableAIFeatures": false,
+    "CodeGPT.apiKey": "CodeGPT Plus Beta"
 }

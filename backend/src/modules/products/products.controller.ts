@@ -7,12 +7,12 @@ import {
   Param,
   Body,
   Query,
-  UploadedFile,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
+import type { MulterField } from '@nestjs/platform-express/multer/interfaces/multer-options.interface';
 import { ProductsService } from './products.service';
 import { UploadsService } from '../uploads/uploads.service';
 import { UploadUrlDto } from '../uploads/dto/upload-url.dto';
@@ -24,6 +24,32 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
 import { productImageMulterOptions } from '../uploads/storage.constants';
+
+/**
+ * Campos de multipart aceitos no cadastro/edicao de produto.
+ *
+ * Usamos UM UNICO FileFieldsInterceptor com esta lista em vez de empilhar
+ * FilesInterceptor('images') + FileInterceptor('image'): cada interceptor do
+ * Multer tem configuracao propria de campos e o primeiro a rodar rejeitava o
+ * campo do outro com "Unexpected field - image" (HTTP 400).
+ */
+const PRODUCT_IMAGE_FIELDS: MulterField[] = [
+  { name: 'image', maxCount: 1 },
+  { name: 'images', maxCount: 5 },
+];
+
+/**
+ * Achata o objeto devolvido pelo FileFieldsInterceptor em uma lista de arquivos.
+ * Convencao: a imagem principal (`image`) vem primeiro, seguida das adicionais
+ * (`images`), para que ProductsService use a primeira como ProductImage de
+ * position 0.
+ */
+function flattenUploadedImages(uploaded?: {
+  image?: Express.Multer.File[];
+  images?: Express.Multer.File[];
+}): Express.Multer.File[] {
+  return [...(uploaded?.image ?? []), ...(uploaded?.images ?? [])];
+}
 
 /** Converte os campos de multipart (sempre strings) para os tipos do DTO. */
 function coerceProductBody(
@@ -65,6 +91,15 @@ function coerceProductBody(
     if (result[key] === '') delete result[key];
   }
 
+  const keepRaw = result.keepImageIds;
+  if (typeof keepRaw === 'string') {
+    try {
+      result.keepImageIds = JSON.parse(keepRaw);
+    } catch {
+      result.keepImageIds = keepRaw ? [keepRaw] : [];
+    }
+  }
+
   return result;
 }
 
@@ -96,15 +131,14 @@ export class ProductsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @UseInterceptors(
-    FilesInterceptor('images', 5, productImageMulterOptions),
-    FileInterceptor('image', productImageMulterOptions),
+    FileFieldsInterceptor(PRODUCT_IMAGE_FIELDS, productImageMulterOptions),
   )
   async create(
     @Body() body: Record<string, unknown>,
-    @UploadedFiles() images: Express.Multer.File[] = [],
-    @UploadedFile() image?: Express.Multer.File,
+    @UploadedFiles()
+    uploaded?: { image?: Express.Multer.File[]; images?: Express.Multer.File[] },
   ) {
-    const files = [...(image ? [image] : []), ...(images ?? [])];
+    const files = flattenUploadedImages(uploaded);
     const dto = coerceProductBody(body) as unknown as CreateProductDto;
     const stored = files.map((file) =>
       this.uploadsService.storeUploadedFile(file),
@@ -136,16 +170,15 @@ export class ProductsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @UseInterceptors(
-    FilesInterceptor('images', 5, productImageMulterOptions),
-    FileInterceptor('image', productImageMulterOptions),
+    FileFieldsInterceptor(PRODUCT_IMAGE_FIELDS, productImageMulterOptions),
   )
   async update(
     @Param('id') id: string,
     @Body() body: Record<string, unknown>,
-    @UploadedFiles() images: Express.Multer.File[] = [],
-    @UploadedFile() image?: Express.Multer.File,
+    @UploadedFiles()
+    uploaded?: { image?: Express.Multer.File[]; images?: Express.Multer.File[] },
   ) {
-    const files = [...(image ? [image] : []), ...(images ?? [])];
+    const files = flattenUploadedImages(uploaded);
     const dto = coerceProductBody(body) as unknown as UpdateProductDto;
     const stored = files.map((file) =>
       this.uploadsService.storeUploadedFile(file),

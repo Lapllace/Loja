@@ -1,0 +1,13 @@
+No seu model User do Prisma, adicionar:
+
+  isDeveloper Boolean @default(false)
+
+Não altere UserRole nem remova OWNER/ADMIN/CUSTOMER. isDeveloper é uma permissão técnica separada do papel comercial, para que uma conta OWNER continue OWNER e também possa receber acesso de desenvolvedor.
+
+Depois:
+
+1. npx prisma migrate dev --name add_developer_access
+2. npx prisma generate
+3. atualizar UserType/frontend para incluir isDeveloper: boolean
+4. garantir que JwtStrategy carregue isDeveloper do usuário autenticado para req.user
+5. não retornar passwordHash no usuário público.

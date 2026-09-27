@@ -7,9 +7,13 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { useAuth } from '@/hooks/useAuth';
 import { api, resolveImageUrl } from '@/lib/api';
-import { Category, ProductFormPayload } from '@/lib/types';
+import { Brand, Category, ProductFormPayload, SelectedImageCandidate } from '@/lib/types';
 import { Button } from '@/components/ui/Button';
 import { LoadingState } from '@/components/ui/LoadingState';
+import {
+  ImageSearchDialog,
+  IMAGE_SEARCH_MAX_SELECTION,
+} from '@/components/admin/ImageSearchDialog';
 
 const inputClassName =
   'w-full rounded-lg border-input bg-background px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-200 outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40';
@@ -40,9 +44,12 @@ interface PreviewState {
 export default function NewProductPage() {
   const router = useRouter();
   const { isAuthenticated, loading: authLoading, user } = useAuth();
+  const isOwner = user?.role === 'OWNER';
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(true);
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [loadingBrands, setLoadingBrands] = useState(true);
 
   const [form, setForm] = useState({
     name: '',
@@ -59,9 +66,20 @@ export default function NewProductPage() {
   const [slugTouched, setSlugTouched] = useState(false);
 
   const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [imageUrlInput, setImageUrlInput] = useState('');
   const [fetchingUrl, setFetchingUrl] = useState(false);
+
+  /**
+   * Imagens escolhidas na busca da internet, ainda NAO baixadas.
+   * Ficam pendentes no estado do formulario ate o produto ser salvo — assim a
+   * busca funciona antes de o produto existir no banco.
+   */
+  const [pendingInternetImages, setPendingInternetImages] = useState<
+    SelectedImageCandidate[]
+  >([]);
+  const [searchDialogOpen, setSearchDialogOpen] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -85,13 +103,18 @@ export default function NewProductPage() {
     let active = true;
 
     const load = async () => {
-      const data = await api.getActiveCategories({ next: { revalidate: 0 } });
+      const [data, brandData] = await Promise.all([
+        api.getActiveCategories({ next: { revalidate: 0 }}),
+        api.getActiveBrands({ next: { revalidate: 0 }}),
+      ]);
       if (!active) return;
       setCategories(data);
+      setBrands(brandData);
       if (data.length > 0) {
         setForm((prev) => (prev.categoryId ? prev : { ...prev, categoryId: data[0].id }));
       }
       setLoadingCategories(false);
+      setLoadingBrands(false);
     };
 
     load();
@@ -128,6 +151,19 @@ export default function NewProductPage() {
       return { src: objectUrl, objectUrl };
     });
   }, []);
+
+  const handleFilesChange = (selectedFiles: FileList | null) => {
+    const selected = Array.from(selectedFiles ?? []).slice(0, IMAGE_SEARCH_MAX_SELECTION);
+    if (selected.length === 0) return;
+    const invalid = selected.find((item) => !item.type.startsWith('image/') || item.size > MAX_UPLOAD_BYTES);
+    if (invalid) {
+      setError('Cada imagem deve ser válida e ter no máximo 5 MB.');
+      return;
+    }
+    setFiles(selected);
+    setPreviewFromFile(selected[0]);
+    setNotice(selected.length > 1 ? `${selected.length} imagens selecionadas.` : null);
+  };
 
   /** Modo 3: "Colar Imagem (Ctrl+V)" — lê imagens da área de transferência. */
   useEffect(() => {
@@ -178,6 +214,7 @@ export default function NewProductPage() {
     }
 
     setFile(null);
+    setFiles([]);
     setPreview((previous) => {
       if (previous?.objectUrl) URL.revokeObjectURL(previous.objectUrl);
       return { src: resolveImageUrl(result.data.url) ?? result.data.url, objectUrl: null };
@@ -187,6 +224,7 @@ export default function NewProductPage() {
 
   const handleRemovePreview = () => {
     setFile(null);
+    setFiles([]);
     setPreview((previous) => {
       if (previous?.objectUrl) URL.revokeObjectURL(previous.objectUrl);
       return null;
@@ -201,7 +239,10 @@ export default function NewProductPage() {
     setError(null);
     setNotice(null);
 
-    if (!preview) {
+    // Aceita tanto uma imagem local/URL quanto imagens escolhidas na internet:
+    // o produto pode ser salvo apenas com as candidatas pendentes — elas são
+    // importadas logo depois de o Product existir.
+    if (!preview && pendingInternetImages.length === 0) {
       setError('Adicione uma foto do produto antes de salvar.');
       return;
     }
@@ -231,13 +272,14 @@ export default function NewProductPage() {
       // A imagem só vai como arquivo se foi escolhida no dispositivo;
       // quando veio por URL ela já está salva e o backend a resolve pelo campo.
       image: file,
+      images: files.slice(1),
     };
 
     setSaving(true);
     const result = await api.createProduct(payload);
-    setSaving(false);
 
     if (!result.ok) {
+      setSaving(false);
       setError(
         result.status === 409
           ? 'Já existe um produto com este SKU ou slug.'
@@ -245,6 +287,57 @@ export default function NewProductPage() {
             ? 'Dados inválidos. Revise os campos e tente novamente.'
             : 'Não foi possível salvar o produto.',
       );
+      return;
+    }
+
+    // O produto ja existe: agora importamos as imagens escolhidas na internet.
+    // Os downloads externos acontecem FORA de qualquer transacao de banco.
+    let importWarning: string | null = null;
+    if (pendingInternetImages.length > 0) {
+      const importResult = await api.importSelectedImages({
+        productId: result.data.id,
+        name: result.data.name,
+        brand: undefined,
+        images: pendingInternetImages.map((img) => ({
+          id: img.id,
+          title: img.title,
+          source: img.source,
+          sourceUrl: img.sourceUrl,
+          imageUrl: img.imageUrl,
+          thumbnailUrl: img.thumbnailUrl,
+          query: img.query,
+        })),
+      });
+
+      if (!importResult.ok) {
+        // O produto NAO e apagado automaticamente: informamos que ele foi criado
+        // e que a importacao das imagens falhou.
+        importWarning =
+          'O produto foi salvo, mas não foi possível importar as imagens da internet.';
+      } else {
+        // Importacao parcial: o produto esta salvo e as imagens que deram certo
+        // ficaram associadas. Dizemos exatamente quais falharam e por que.
+        const falhas = (importResult.data.results ?? []).filter(
+          (r) => !r.success,
+        );
+        if (falhas.length > 0) {
+          const detalhes = falhas
+            .map((f) => (f.domain ? `• ${f.domain}` : '• imagem'))
+            .join('\n');
+          const motivo = falhas.find((f) => f.error)?.error;
+          importWarning =
+            `Produto salvo. ${importResult.data.imported ?? importResult.data.images.length} ` +
+            `imagem(ns) importada(s) e ${falhas.length} falhou(aram):\n${detalhes}` +
+            (motivo ? `\nMotivo: ${motivo}` : '');
+        }
+      }
+    }
+
+    setSaving(false);
+
+    if (importWarning) {
+      // Erro com multiplas linhas precisa preservar a quebra na mensagem.
+      setError(importWarning);
       return;
     }
 
@@ -305,7 +398,7 @@ export default function NewProductPage() {
       {error && (
         <div
           role="alert"
-          className="mb-6 rounded-xl border-error/30 bg-error/10 px-4 py-3 text-error"
+          className="mb-6 whitespace-pre-line rounded-xl border-error/30 bg-error/10 px-4 py-3 text-error"
         >
           {error}
         </div>
@@ -484,16 +577,32 @@ export default function NewProductPage() {
 
             <div>
               <label htmlFor="product-brand" className={labelClassName}>
-                Marca (ID)
+                Marca
               </label>
-              <input
+              {/*
+                Antes era um campo de texto livre rotulado "Marca (ID)". O valor
+                digitado (ex.: "Lattafa") era enviado como `brandId` e o backend
+                respondia 400 "Brand not found" — que a UI traduzia como
+                "Dados inválidos". Agora é um seletor das marcas existentes, então
+                só IDs reais podem ser enviados.
+              */}
+              <select
                 id="product-brand"
                 name="brandId"
                 value={form.brandId}
                 onChange={(e) => handleChange('brandId', e.target.value)}
                 className={inputClassName}
-                placeholder="Opcional"
-              />
+                disabled={loadingBrands}
+              >
+                <option value="">
+                  {loadingBrands ? 'Carregando...' : 'Sem marca'}
+                </option>
+                {brands.map((brand) => (
+                  <option key={brand.id} value={brand.id}>
+                    {brand.name}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         </section>
@@ -556,9 +665,9 @@ export default function NewProductPage() {
                 accept="image/*"
                 capture="environment"
                 onChange={(e) => {
-                  const selected = e.target.files?.[0];
-                  if (selected) setPreviewFromFile(selected);
+                  handleFilesChange(e.target.files);
                 }}
+                multiple
                 className="block w-full cursor-pointer rounded-lg border-border bg-background text-sm text-muted-foreground file:mr-3 file:rounded-l-lg file:border-0 file:bg-accent file:px-4 file:py-2 file:text-sm file:font-semibold file:text-ink hover:file:bg-accent-dark"
               />
               <p className="mt-1 text-xs text-muted-foreground">
@@ -613,7 +722,68 @@ export default function NewProductPage() {
                 (ou mantenha pressionado para colar no celular).
               </div>
             </div>
+
+            {/* Modo 4: busca na internet (somente OWNER) */}
+            {isOwner && (
+              <div>
+                <p className="mb-2 text-sm font-medium text-foreground">
+                  4. Buscar imagem na internet
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setSearchDialogOpen(true)}
+                >
+                  🔎 Buscar imagem na internet
+                </Button>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  O termo de busca é preenchido com o nome do produto. As imagens escolhidas só
+                  são baixadas quando você salvar.
+                </p>
+              </div>
+            )}
           </div>
+
+          {/* Imagens selecionadas na internet (pendentes até salvar) */}
+          {pendingInternetImages.length > 0 && (
+            <div className="mt-6 rounded-xl border-border bg-muted/30 p-4">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <p className="text-sm font-medium text-foreground">Fotos selecionadas</p>
+                <p className="text-xs text-muted-foreground">
+                  {pendingInternetImages.length}/{IMAGE_SEARCH_MAX_SELECTION} selecionadas
+                </p>
+              </div>
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+                {pendingInternetImages.map((img) => (
+                  <div key={img.id} className="relative aspect-square overflow-hidden rounded-lg border-border bg-background">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={img.thumbnailUrl || img.imageUrl}
+                      alt={img.title || 'Imagem selecionada'}
+                      className="h-full w-full object-contain"
+                      referrerPolicy="no-referrer"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPendingInternetImages((current) =>
+                          current.filter((item) => item.id !== img.id),
+                        )
+                      }
+                      aria-label="Remover imagem"
+                      className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-error text-[10px] font-bold text-white"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-3 text-xs text-muted-foreground">
+                Serão baixadas e associadas ao produto quando você salvar.
+              </p>
+            </div>
+          )}
         </section>
 
         <div className="lg:col-span-2">
@@ -632,6 +802,25 @@ export default function NewProductPage() {
           </div>
         </div>
       </form>
+
+      {/* Busca de imagens na internet (reutilizável; só OWNER).
+          A `key` depende APENAS de `open`: assim o diálogo é remontado ao abrir
+          (pegando o nome atual do produto) sem ser destruído enquanto o
+          usuário digita ou uma busca está em andamento. */}
+      <ImageSearchDialog
+        key={searchDialogOpen ? 'search-open' : 'search-closed'}
+        open={searchDialogOpen}
+        onClose={() => setSearchDialogOpen(false)}
+        initialQuery={form.name}
+        initiallySelected={pendingInternetImages}
+        onConfirm={(images) => {
+          setPendingInternetImages(images.slice(0, IMAGE_SEARCH_MAX_SELECTION));
+          setNotice(
+            `${images.length} imagem(ns) selecionada(s). Elas serão baixadas ao salvar o produto.`,
+          );
+          setError(null);
+        }}
+      />
     </main>
   );
 }

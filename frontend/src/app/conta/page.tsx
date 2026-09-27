@@ -10,6 +10,7 @@ import { Address, CreateAddressPayload, User } from '@/lib/types';
 import { Button } from '@/components/ui/Button';
 import { LoadingState } from '@/components/ui/LoadingState';
 import { SESSION_STORAGE_KEY } from '@/lib/constants';
+import { lookupCep } from '@/lib/cep';
 
 /** Formulário vazio usado para criar um novo endereço. */
 const EMPTY_ADDRESS_FORM: CreateAddressPayload = {
@@ -30,13 +31,14 @@ const inputClassName =
 
 const labelClassName = 'mb-1 block text-sm font-medium text-foreground';
 
-/** Lê usuário e token da sessão persistida em 'auth_session' (localStorage). */
+/** Lê usuário e token da sessão persistida em localStorage ou sessionStorage. */
 function readStoredSession(): { user: User | null; token: string | null } {
   const empty = { user: null, token: null };
   if (typeof window === 'undefined') return empty;
 
   try {
-    const raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
+    const raw = window.localStorage.getItem(SESSION_STORAGE_KEY)
+      ?? window.sessionStorage.getItem(SESSION_STORAGE_KEY);
     if (!raw) return empty;
 
     const parsed: unknown = JSON.parse(raw);
@@ -118,6 +120,20 @@ function AddressForm({
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
+  const lookupZipCode = async (value: string) => {
+    const zipcode = value.replace(/\D/g, '').slice(0, 8);
+    setForm((prev) => ({ ...prev, zipcode }));
+
+    const data = await lookupCep(zipcode);
+    if (data) {
+      setForm((prev) => ({
+        ...prev,
+        ...data,
+      }));
+      document.getElementById('address-number')?.focus();
+    }
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const created = await onSubmit(form);
@@ -153,7 +169,8 @@ function AddressForm({
             inputMode="numeric"
             autoComplete="postal-code"
             value={form.zipcode}
-            onChange={(e) => handleChange('zipcode', e.target.value)}
+            onChange={(e) => void lookupZipCode(e.target.value)}
+            onBlur={(e) => void lookupZipCode(e.target.value)}
             className={inputClassName}
             placeholder="00000-000"
           />
@@ -278,7 +295,7 @@ function ProfileField({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <dt className="text-sm font-medium text-muted-foreground">{label}</dt>
-      <dd className="mt-1 break-words text-foreground">{value}</dd>
+      <dd className="mt-1 wrap-break-word text-foreground">{value}</dd>
     </div>
   );
 }
@@ -378,6 +395,7 @@ export default function AccountPage() {
     logout();
     try {
       window.localStorage.removeItem(SESSION_STORAGE_KEY);
+      window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
     } catch {
       // localStorage indisponível (modo privado): logout em memória já ocorreu.
     }
@@ -385,7 +403,7 @@ export default function AccountPage() {
   };
 
   if (authLoading || loadingData) {
-    return <LoadingState message="Carregando sua conta..." className="min-h-[500px]" />;
+    return <LoadingState message="Carregando sua conta..." className="min-h-125" />;
   }
 
   if (!isAuthenticated) {

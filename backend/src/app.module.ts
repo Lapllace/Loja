@@ -14,6 +14,7 @@ import { UploadsModule } from './modules/uploads/uploads.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { AddressesModule } from './modules/addresses/addresses.module';
 import { DeliveryModule } from './modules/delivery/delivery.module';
+import { ImageSearchModule } from './modules/image-search/image-search.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { DeliveryModule } from './modules/delivery/delivery.module';
     PaymentsModule,
     AddressesModule,
     DeliveryModule,
+    ImageSearchModule,
   ],
 })
 export class AppModule {}

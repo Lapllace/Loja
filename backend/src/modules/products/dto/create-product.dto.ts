@@ -30,9 +30,13 @@ export class CreateProductDto {
   @IsString()
   shortDescription?: string;
 
-  @IsNotEmpty()
+  /**
+   * `@IsNotEmpty` garante que ausência/`null`/`''` sejam rejeitados ANTES de
+   * chegar ao Prisma — sem isso o create estourava um 500 em vez de 400.
+   */
+  @IsNotEmpty({ message: 'price is required' })
   @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsNumber({ maxDecimalPlaces: 2 }, { message: 'price must be a number' })
   @Min(0)
   price: number;
 

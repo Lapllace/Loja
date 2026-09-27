@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  IsArray,
   IsBoolean,
   IsInt,
   IsNotEmpty,
@@ -95,4 +96,13 @@ export class UpdateProductDto {
   @IsString()
   @IsNotEmpty()
   brandId?: string;
+
+  /**
+   * Quando presente, as imagens atuais que NÃO estão nesta lista são removidas.
+   * Novos uploads são acrescentados ao final, sem apagar as mantidas.
+   */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  keepImageIds?: string[];
 }

@@ -15,9 +15,9 @@ export function Footer() {
             <Image
               src="/branding/logo.jpg"
               alt="Gil Imports"
-              width={140}
-              height={44}
-              className="h-11 w-auto mb-4"
+              width={150}
+              height={150}
+              className="h-11 w-auto object-contain mb-4"
             />
             <p className="max-w-xs text-sm leading-relaxed text-white/70">
               Produtos importados selecionados: acessórios para celular, fones, caixas de som,

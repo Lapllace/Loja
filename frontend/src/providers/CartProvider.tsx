@@ -104,8 +104,9 @@ function messageForStatus(status: number, fallback: string): string {
     case 400:
       return 'Quantidade indisponível em estoque.';
     case 401:
-    case 403:
       return 'Sua sessão expirou. Entre novamente para continuar.';
+    case 403:
+      return 'Sua conta não tem permissão para alterar o carrinho.';
     case 404:
       return 'Item não encontrado no carrinho.';
     case 0:

@@ -18,6 +18,8 @@ import { useCart } from '@/providers/CartProvider';
 
 import { useCartUi } from '@/providers/CartUiProvider';
 
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
+
 interface HeaderProps {
 
   categories: Category[];
@@ -108,19 +110,17 @@ export function Header({ categories }: HeaderProps) {
           <Link href="/loja" className="flex items-center shrink-0" aria-label="Página inicial">
 
             <Image
-
               src="/branding/logo.jpg"
 
               alt="Gil Imports"
 
-              width={140}
+              width={150}
 
-              height={44}
+              height={150}
 
-              className="h-11 w-auto"
+              className="h-11 w-auto object-contain"
 
               priority
-
             />
 
           </Link>
@@ -140,6 +140,8 @@ export function Header({ categories }: HeaderProps) {
           {/* Ações */}
 
           <div className="flex items-center gap-1.5 sm:gap-2 ml-auto">
+
+            <ThemeToggle />
 
             {/* Carrinho (ativo) */}
 
