@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { API_URL } from "@/lib/api";
 import { CartProvider } from '@/providers/CartProvider';
 import { CartUiProvider } from '@/providers/CartUiProvider';
+import { GoogleOAuthProvider } from '@react-oauth/google';
 import "./globals.css";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3001";
@@ -40,14 +41,24 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   // API_URL importado apenas para garantir leitura do env em build (evita tree-shaking de config)
   void API_URL;
 
+  const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+
   return (
         <html lang="pt-BR" className="h-full antialiased">
       <body className="min-h-full flex flex-col">
         {/* CartProvider: estado de dados (GET/POST/PATCH/DELETE /cart)
             CartUiProvider: estado de UI da gaveta (aberto/fechado) */}
-        <CartProvider>
-          <CartUiProvider>{children}</CartUiProvider>
-        </CartProvider>
+        {googleClientId ? (
+          <GoogleOAuthProvider clientId={googleClientId}>
+            <CartProvider>
+              <CartUiProvider>{children}</CartUiProvider>
+            </CartProvider>
+          </GoogleOAuthProvider>
+        ) : (
+          <CartProvider>
+            <CartUiProvider>{children}</CartUiProvider>
+          </CartProvider>
+        )}
       </body>
     </html>
   );

@@ -59,13 +59,17 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const { user } = useAuth();
   const isOwner = user?.role === 'OWNER';
+  // O Dashboard vive em /admin/dashboard; /admin apenas redireciona para lá.
+  const isDashboard =
+    pathname === '/admin/dashboard' || pathname.startsWith('/admin/dashboard/');
 
   return (
     <nav aria-label="Navegação administrativa" className="space-y-6">
       <Link
-        href="/admin"
+        href="/admin/dashboard"
         onClick={onNavigate}
-        className={`block rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${pathname === '/admin'
+        aria-current={isDashboard ? 'page' : undefined}
+        className={`block rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${isDashboard
             ? 'bg-accent/10 text-accent'
             : 'text-foreground hover:bg-muted'
           }`}
@@ -178,7 +182,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           </svg>
           Menu
         </button>
-        <Link href="/admin" className="font-bold text-foreground">
+        <Link href="/admin/dashboard" className="font-bold text-foreground">
           Painel Admin
         </Link>
       </header>
@@ -186,7 +190,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       <div className="mx-auto flex w-full max-w-7xl">
         {/* Sidebar desktop */}
         <aside className="sticky top-0 hidden h-screen w-64 shrink-0 overflow-y-auto border-r border-border px-4 py-6 lg:block">
-          <Link href="/admin" className="mb-6 block px-3 text-lg font-bold text-foreground">
+          <Link href="/admin/dashboard" className="mb-6 block px-3 text-lg font-bold text-foreground">
             Painel Admin
           </Link>
           <NavList />

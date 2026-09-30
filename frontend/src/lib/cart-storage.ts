@@ -11,10 +11,23 @@
 import { Cart } from './types';
 
 const CART_STORAGE_KEY = 'cart_cache';
+const GUEST_CART_KEY = 'guest_cart';
 
 interface CachedCart {
   userId?: string;
   cart: Cart;
+}
+
+/**
+ * Item persistido do carrinho de convidado.
+ *
+ * Só guardamos `productId` + `quantity`: nome, imagem, preço e estoque vêm
+ * SEMPRE do backend (ver `buildGuestCart` no CartProvider), para que o
+ * visitante veja a lista e o total corretos sem precisar de login.
+ */
+export interface GuestCartItem {
+  productId: string;
+  quantity: number;
 }
 
 function isBrowser(): boolean {
@@ -50,6 +63,51 @@ export function clearCartStorage(): void {
   if (!isBrowser()) return;
   try {
     window.localStorage.removeItem(CART_STORAGE_KEY);
+  } catch {
+    // ignorar
+  }
+}
+
+export function readGuestCart(): GuestCartItem[] {
+  if (!isBrowser()) return [];
+  try {
+    const raw = window.localStorage.getItem(GUEST_CART_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    // O storage é editável pelo usuário: valida cada entrada antes de confiar.
+    return parsed.flatMap((entry): GuestCartItem[] => {
+      if (!entry || typeof entry !== 'object') return [];
+      const candidate = entry as Partial<GuestCartItem>;
+      if (typeof candidate.productId !== 'string' || candidate.productId.length === 0) {
+        return [];
+      }
+      const quantity = Number(candidate.quantity);
+      return [
+        {
+          productId: candidate.productId,
+          quantity: Math.max(1, Number.isFinite(quantity) ? Math.trunc(quantity) : 1),
+        },
+      ];
+    });
+  } catch {
+    return [];
+  }
+}
+
+export function writeGuestCart(items: GuestCartItem[]): void {
+  if (!isBrowser()) return;
+  try {
+    window.localStorage.setItem(GUEST_CART_KEY, JSON.stringify(items));
+  } catch {
+    // ignorar
+  }
+}
+
+export function clearGuestCart(): void {
+  if (!isBrowser()) return;
+  try {
+    window.localStorage.removeItem(GUEST_CART_KEY);
   } catch {
     // ignorar
   }

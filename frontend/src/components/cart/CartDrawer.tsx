@@ -43,6 +43,7 @@ export function CartDrawer() {
     updating,
     error,
     mutationError,
+    initialized,
     updateItem,
     removeItem,
     clearCart,
@@ -125,7 +126,7 @@ export function CartDrawer() {
         aria-modal="true"
         aria-label="Carrinho de compras"
         tabIndex={-1}
-        className={`absolute right-0 top-0 h-full w-full max-w-md bg-background shadow-2xl flex-col transition-transform duration-300 ease-out focus:outline-none ${isOpen ? 'translate-x-0' : 'translate-x-full'
+        className={`absolute right-0 top-0 h-full w-full max-w-md bg-background shadow-2xl flex flex-col transition-transform duration-300 ease-out focus:outline-none ${isOpen ? 'translate-x-0' : 'translate-x-full'
           }`}
       >
         {/* Cabeçalho */}
@@ -168,24 +169,9 @@ export function CartDrawer() {
           </div>
         )}
 
-        {/* Conteúdo */}
+        {/* Conteúdo — visitantes também veem os itens adicionados */}
         <div className="flex-1 overflow-y-auto px-5 py-4">
-          {!isAuthenticated ? (
-            <EmptyState
-              title="Faça login para usar o carrinho"
-              description="Seus produtos ficam salvos na sua conta Gil Imports."
-              icon={<CartIcon />}
-              action={
-                <Link
-                  href="/login"
-                  onClick={closeCart}
-                  className="mt-2 inline-flex items-center px-5 py-2.5 rounded-lg bg-accent text-ink font-semibold hover:bg-accent-dark transition-colors"
-                >
-                  Entrar na conta
-                </Link>
-              }
-            />
-          ) : error && items.length === 0 ? (
+          {error && items.length === 0 ? (
             <EmptyState
               title="Não foi possível carregar"
               description={error}
@@ -200,7 +186,7 @@ export function CartDrawer() {
                 </button>
               }
             />
-          ) : loading && items.length === 0 ? (
+          ) : (loading || !initialized) && items.length === 0 ? (
             <LoadingState message="Carregando seu carrinho..." className="min-h-[240px]" />
           ) : items.length === 0 ? (
             <EmptyState
@@ -232,8 +218,8 @@ export function CartDrawer() {
           )}
         </div>
 
-        {/* Rodapé com resumo — só quando há itens */}
-        {isAuthenticated && items.length > 0 && (
+        {/* Rodapé com resumo — visitantes também veem lista e total */}
+        {items.length > 0 && (
           <footer className="border-t border-border bg-muted/30 p-5">
             <CartSummary
               cart={cart}
@@ -243,6 +229,18 @@ export function CartDrawer() {
               isAuthenticated={isAuthenticated}
               compact
             />
+            {!isAuthenticated && (
+              <p className="mt-3 text-center text-xs text-muted-foreground">
+                Comprando como visitante — os itens ficam salvos neste dispositivo.{' '}
+                <Link
+                  href="/login"
+                  onClick={closeCart}
+                  className="font-semibold text-accent hover:underline"
+                >
+                  Entre para finalizar
+                </Link>
+              </p>
+            )}
             <Link
               href="/loja/carrinho"
               onClick={closeCart}

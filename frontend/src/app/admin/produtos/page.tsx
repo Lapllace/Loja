@@ -18,7 +18,7 @@
  */
 
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import Image from 'next/image';
 import { useAuth } from '@/hooks/useAuth';
 import { api, resolveImageUrl } from '@/lib/api';
@@ -31,6 +31,27 @@ const sortByOptions = [
   { value: 'stock', label: 'Estoque' },
   { value: 'createdAt', label: 'Data' },
 ] as const;
+
+/**
+ * Modos do ajuste de estoque em massa.
+ *  - add: soma N unidades ao estoque atual;
+ *  - remove: subtrai N unidades (nunca abaixo de zero);
+ *  - set: define o mesmo valor fixo para os produtos selecionados.
+ */
+const BULK_STOCK_MODES = [
+  { value: 'add', label: 'Adicionar (+)' },
+  { value: 'remove', label: 'Remover (−)' },
+  { value: 'set', label: 'Definir valor' },
+] as const;
+
+type BulkStockMode = (typeof BULK_STOCK_MODES)[number]['value'];
+
+/** Novo estoque conforme o modo; nunca retorna valor negativo. */
+function nextStockValue(current: number, quantity: number, mode: BulkStockMode): number {
+  if (mode === 'add') return current + quantity;
+  if (mode === 'remove') return Math.max(0, current - quantity);
+  return quantity;
+}
 
 export default function AdminProductsPage() {
   const { user } = useAuth();
@@ -55,6 +76,28 @@ export default function AdminProductsPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [discontinueMode, setDiscontinueMode] = useState(false);
+
+  // Ações em lote
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkStockModalOpen, setBulkStockModalOpen] = useState(false);
+  const [bulkStockMode, setBulkStockMode] = useState<BulkStockMode>('add');
+  const [bulkStockQuantity, setBulkStockQuantity] = useState('');
+  const [bulkStockBusy, setBulkStockBusy] = useState(false);
+
+  // Preservação de scroll
+  const scrollPositionRef = useRef(0);
+
+  const saveScrollPosition = () => {
+    scrollPositionRef.current = window.scrollY;
+    sessionStorage.setItem('admin-products-scroll', window.scrollY.toString());
+  };
+
+  const restoreScrollPosition = () => {
+    const saved = sessionStorage.getItem('admin-products-scroll');
+    if (saved) {
+      window.scrollTo(0, parseInt(saved, 10));
+    }
+  };
 
   const loadProducts = useCallback(async () => {
     setLoadingProducts(true);
@@ -134,6 +177,10 @@ export default function AdminProductsPage() {
     return result;
   }, [allProducts, search, categoryId, brandId, statusFilter, stockFilter, minPrice, maxPrice, sortBy, order]);
 
+  useEffect(() => {
+    restoreScrollPosition();
+  }, [filtered]);
+
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return;
     setDeleteBusy(true);
@@ -157,6 +204,7 @@ export default function AdminProductsPage() {
       }
       setDeleteTarget(null);
       setDiscontinueMode(false);
+      saveScrollPosition();
       void loadProducts();
       return;
     }
@@ -180,13 +228,96 @@ export default function AdminProductsPage() {
       return;
     }
     setDeleteTarget(null);
+    saveScrollPosition();
     void loadProducts();
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+
+    const confirmed = window.confirm(
+      `Deseja excluir ${selectedIds.size} produto(s)? Esta ação não pode ser desfeita.`,
+    );
+    if (!confirmed) return;
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const id of selectedIds) {
+      const result = await api.deleteProduct(id);
+      if (result.ok) {
+        successCount++;
+      } else {
+        failCount++;
+      }
+    }
+
+    setSelectedIds(new Set());
+    saveScrollPosition();
+    void loadProducts();
+
+    if (failCount > 0) {
+      alert(`${successCount} produtos excluídos, ${failCount} falharam.`);
+    }
+  };
+
+  const handleBulkStock = async () => {
+    const quantity = parseInt(bulkStockQuantity, 10);
+    const invalid = isNaN(quantity) || quantity < 0 || (bulkStockMode !== 'set' && quantity <= 0);
+    if (invalid) {
+      alert(
+        bulkStockMode === 'set'
+          ? 'Informe um estoque final maior ou igual a zero'
+          : 'Quantidade inválida',
+      );
+      return;
+    }
+
+    setBulkStockBusy(true);
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const id of selectedIds) {
+      const product = allProducts.find((p) => p.id === id);
+      if (!product) continue;
+
+      const result = await api.updateProduct(id, {
+        sku: product.sku,
+        name: product.name,
+        slug: product.slug,
+        price: Number(product.price),
+        stock: nextStockValue(product.stock, quantity, bulkStockMode),
+        categoryId: product.categoryId,
+        active: product.active,
+      });
+
+      if (result.ok) successCount += 1;
+      else failCount += 1;
+    }
+
+    setBulkStockBusy(false);
+    setBulkStockModalOpen(false);
+    setBulkStockQuantity('');
+    setSelectedIds(new Set());
+    saveScrollPosition();
+    void loadProducts();
+
+    if (failCount > 0) {
+      alert(`${successCount} produto(s) atualizado(s), ${failCount} falharam.`);
+    }
   };
 
   if (!isAdmin) return null;
 
   return (
     <div>
+      <div className="mb-6">
+        <Link href="/admin/dashboard" className="text-sm text-muted-foreground hover:text-primary">
+          ← Voltar ao painel
+        </Link>
+      </div>
+
       <p className="text-sm font-semibold uppercase tracking-[0.16em] text-accent">Catálogo</p>
       <h1 className="mt-2 text-3xl font-bold text-foreground">Produtos</h1>
       <p className="mt-2 text-muted-foreground">Gerencie os produtos cadastrados na loja.</p>
@@ -197,6 +328,12 @@ export default function AdminProductsPage() {
         >
           + Novo produto
         </Link>
+        <Link
+          href="/admin/produtos/importar"
+          className="inline-flex rounded-lg border border-border px-5 py-3 font-semibold text-foreground hover:bg-muted"
+        >
+          Importar lista
+        </Link>
         {user?.role === 'OWNER' && (
           <Link
             href="/admin/desenvolvedor/imagens"
@@ -206,6 +343,45 @@ export default function AdminProductsPage() {
           </Link>
         )}
       </div>
+
+      {/* Ações em lote */}
+      {selectedIds.size > 0 && (
+        <div className="mt-4 rounded-xl border-border bg-accent/10 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <span className="text-sm font-semibold text-foreground">
+              {selectedIds.size} produto(s) selecionado(s)
+            </span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setBulkStockModalOpen(true)}
+                className="rounded-lg border-border bg-background px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted"
+              >
+                Ajustar estoque
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteTarget(null);
+                  setDeleteError(null);
+                  setDiscontinueMode(false);
+                  handleBulkDelete();
+                }}
+                className="rounded-lg bg-error px-4 py-2 text-sm font-semibold text-white hover:bg-error/90"
+              >
+                Excluir selecionados
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedIds(new Set())}
+                className="rounded-lg border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted"
+              >
+                Limpar seleção
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Filtros — apenas os suportados pela API (QueryProductDto) */}
       <div className="mt-6 grid gap-3 rounded-xl border-border bg-card p-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -312,6 +488,20 @@ export default function AdminProductsPage() {
             <table className="w-full text-sm">
               <thead className="border-b border-border bg-muted/50">
                 <tr>
+                  <th className="px-4 py-3 text-left">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.size === filtered.length && filtered.length > 0}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedIds(new Set(filtered.map(p => p.id)));
+                        } else {
+                          setSelectedIds(new Set());
+                        }
+                      }}
+                      className="rounded border-input"
+                    />
+                  </th>
                   <th className="px-4 py-3 text-left font-semibold text-foreground">Produto</th>
                   <th className="px-4 py-3 text-left font-semibold text-foreground">Marca</th>
                   <th className="px-4 py-3 text-left font-semibold text-foreground">Preço</th>
@@ -323,6 +513,22 @@ export default function AdminProductsPage() {
               <tbody>
                 {filtered.map((product) => (
                   <tr key={product.id} className="border-b border-border">
+                    <td className="px-4 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(product.id)}
+                        onChange={(e) => {
+                          const newSelected = new Set(selectedIds);
+                          if (e.target.checked) {
+                            newSelected.add(product.id);
+                          } else {
+                            newSelected.delete(product.id);
+                          }
+                          setSelectedIds(newSelected);
+                        }}
+                        className="rounded border-input"
+                      />
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         {product.images?.[0]?.url && (
@@ -469,6 +675,94 @@ export default function AdminProductsPage() {
                   {deleteBusy ? 'Excluindo...' : 'Excluir'}
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de estoque em massa */}
+      {bulkStockModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+          <button
+            type="button"
+            aria-label="Fechar"
+            onClick={() => setBulkStockModalOpen(false)}
+            className="absolute inset-0 bg-black/50"
+          />
+          <div className="relative w-full max-w-md rounded-2xl border-border bg-background p-6 shadow-xl">
+            <h2 className="text-lg font-bold text-foreground">
+              Ajustar estoque em massa
+            </h2>
+
+            <p className="mt-2 text-sm text-muted-foreground">
+              {selectedIds.size} produto(s) selecionado(s)
+            </p>
+
+            <fieldset className="mt-4">
+              <legend className="mb-2 block text-sm font-medium text-foreground">Operação</legend>
+              <div className="flex flex-wrap gap-2">
+                {BULK_STOCK_MODES.map((mode) => (
+                  <button
+                    key={mode.value}
+                    type="button"
+                    onClick={() => setBulkStockMode(mode.value)}
+                    aria-pressed={bulkStockMode === mode.value}
+                    className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+                      bulkStockMode === mode.value
+                        ? 'bg-accent text-ink'
+                        : 'border-border text-foreground hover:bg-muted'
+                    }`}
+                  >
+                    {mode.label}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+
+            <div className="mt-4">
+              <label htmlFor="bulkStock" className="block text-sm font-medium text-foreground mb-2">
+                {bulkStockMode === 'set' ? 'Novo estoque' : 'Quantidade'}
+              </label>
+              <input
+                id="bulkStock"
+                type="number"
+                min={bulkStockMode === 'set' ? 0 : 1}
+                value={bulkStockQuantity}
+                onChange={(e) => setBulkStockQuantity(e.target.value)}
+                className="w-full rounded-lg border-input bg-background px-3 py-2 text-sm text-foreground"
+                placeholder={bulkStockMode === 'set' ? '50' : '10'}
+              />
+              <p className="mt-2 text-xs text-muted-foreground">
+                {bulkStockMode === 'add'
+                  ? 'Soma a quantidade informada ao estoque atual de cada produto.'
+                  : bulkStockMode === 'remove'
+                    ? 'Subtrai a quantidade informada; o estoque nunca fica negativo.'
+                    : 'Define o mesmo valor de estoque para todos os produtos selecionados.'}
+              </p>
+            </div>
+
+            <div className="mt-6 flex flex-wrap justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setBulkStockModalOpen(false)}
+                className="rounded-lg border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleBulkStock}
+                disabled={bulkStockBusy}
+                className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-ink hover:bg-accent-dark disabled:opacity-60"
+              >
+                {bulkStockBusy
+                  ? 'Aplicando...'
+                  : bulkStockMode === 'add'
+                    ? 'Adicionar'
+                    : bulkStockMode === 'remove'
+                      ? 'Remover'
+                      : 'Definir'}
+              </button>
             </div>
           </div>
         </div>

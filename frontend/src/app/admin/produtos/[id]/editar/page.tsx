@@ -411,8 +411,8 @@ export default function EditProductPage() {
   return (
     <main className="container-custom py-8 md:py-12">
       <nav aria-label="Você está aqui" className="mb-4 text-sm text-muted-foreground">
-        <Link href="/" className="hover:text-accent">
-          Início
+        <Link href="/admin/dashboard" className="hover:text-accent">
+          Painel Admin
         </Link>
         <span className="mx-2" aria-hidden="true">
           /
@@ -734,7 +734,7 @@ export default function EditProductPage() {
 
         <div className="lg:col-span-2 flex justify-end gap-3">
           <Link
-            href="/admin/produtos"
+            href="/admin/dashboard"
             className="rounded-lg border border-border px-6 py-2.5 font-semibold text-foreground hover:bg-muted"
           >
             Cancelar

@@ -25,6 +25,10 @@ model User {
   email        String @unique
   passwordHash String
 
+  // Identificador estável da conta Google (claim `sub` do ID token).
+  // Nulo para quem se cadastrou apenas com e-mail/senha.
+  googleId String? @unique
+
   cpf   String? @unique
   phone String?
 
@@ -223,6 +227,9 @@ model Order {
   total    Decimal @db.Decimal(10, 2)
 
   notes String?
+
+  // Nome da opção de frete escolhida no checkout (ex.: "Motoboy / Entrega Local").
+  shippingOptionName String?
 
   shippingRecipient  String
   shippingZipcode    String

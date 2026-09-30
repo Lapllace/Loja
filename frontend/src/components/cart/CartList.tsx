@@ -13,8 +13,10 @@ interface CartListProps {
   updating: boolean;
   onUpdate: (item: CartItem, quantity: number) => void | Promise<void>;
   onRemove: (item: CartItem) => void | Promise<void>;
+  /** Visitantes também veem a lista; apenas o checkout exige conta. */
   isAuthenticated: boolean;
-  onLoginPrompt: () => void;
+  /** Nova tentativa do GET /cart quando o carregamento falha. */
+  onRetry: () => void;
 }
 
 export function CartList({
@@ -25,7 +27,7 @@ export function CartList({
   onUpdate,
   onRemove,
   isAuthenticated,
-  onLoginPrompt,
+  onRetry,
 }: CartListProps) {
   if (loading) {
     return <LoadingState message="Carregando seu carrinho..." />;
@@ -43,33 +45,11 @@ export function CartList({
         }
         action={
           <button
-            onClick={onLoginPrompt}
+            onClick={onRetry}
             className="mt-2 inline-flex items-center px-5 py-2.5 rounded-lg bg-accent text-ink font-semibold hover:bg-accent-dark"
           >
             Tentar novamente
           </button>
-        }
-      />
-    );
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <EmptyState
-        title="Faça login para ver seu carrinho"
-        description="Produtos adicionados ficam salvos na sua conta Gil Imports."
-        icon={
-          <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.982 18.04a9 9 0 0 0 .018-.422l3.254-.002a.75.75 0 0 0 .001-1.499L6.75 16.51a.75.75 0 0 0 0 1.5l3.254.002a9 9 0 0 0 .018.422m8.77-9.757a.75.75 0 0 1-.564-.564l.947-3.79a.5.5 0 0 1 .96.133l1.6 6.006a.75.75 0 0 1-.447.925l-2.98 1.116a.5.5 0 0 1-.624-.624l1.347-4.862a.5.5 0 0 1 .632-.321l.01.004m-7.213 3.256a.75.75 0 0 0 0 1.5h7.5a.75.75 0 0 0 0-1.5h-7.5Z" />
-          </svg>
-        }
-        action={
-          <Link
-            href="/login"
-            className="mt-2 inline-flex items-center px-5 py-2.5 rounded-lg bg-accent text-ink font-semibold hover:bg-accent-dark"
-          >
-            Entrar na conta
-          </Link>
         }
       />
     );
@@ -98,16 +78,27 @@ export function CartList({
   }
 
   return (
-    <ul className="divide-y divide-border">
-      {items.map((item) => (
-        <CartItemRow
-          key={item.id ?? item.productId}
-          item={item}
-          updating={updating}
-          onChange={(q) => void onUpdate(item, q)}
-          onRemove={() => void onRemove(item)}
-        />
-      ))}
-    </ul>
+    <div>
+      {!isAuthenticated && (
+        <p className="mb-4 rounded-lg border-border bg-muted/40 px-4 py-3 text-xs text-muted-foreground">
+          Você está comprando como visitante: os itens ficam salvos neste dispositivo.{' '}
+          <Link href="/login" className="font-semibold text-accent hover:underline">
+            Entre na conta
+          </Link>{' '}
+          para finalizar a compra.
+        </p>
+      )}
+      <ul className="divide-y divide-border">
+        {items.map((item) => (
+          <CartItemRow
+            key={item.id ?? item.productId}
+            item={item}
+            updating={updating}
+            onChange={(q) => void onUpdate(item, q)}
+            onRemove={() => void onRemove(item)}
+          />
+        ))}
+      </ul>
+    </div>
   );
 }

@@ -48,11 +48,18 @@ export default function AdminCategoriesPage() {
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Category | null>(null);
 
+  // Ações em lote (o backend não possui endpoint bulk: percorremos os IDs
+  // selecionados com os endpoints PATCH/DELETE existentes).
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+
   const load = useCallback(async () => {
     await Promise.resolve();
     setLoading(true);
     const data = await api.getCategories({ next: { revalidate: 0 } });
     setCategories(data);
+    // A lista foi refeita: manter seleção de itens que não existem mais confunde.
+    setSelectedIds(new Set());
     setLoading(false);
   }, []);
 
@@ -141,6 +148,84 @@ export default function AdminCategoriesPage() {
     void load();
   };
 
+  const toggleSelected = (id: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const allSelected = categories.length > 0 && selectedIds.size === categories.length;
+
+  const toggleSelectAll = (checked: boolean) => {
+    setSelectedIds(checked ? new Set(categories.map((category) => category.id)) : new Set());
+  };
+
+  /** Ativa/desativa em lote reutilizando PATCH /categories/:id. */
+  const handleBulkActive = async (active: boolean) => {
+    if (selectedIds.size === 0) return;
+    setBulkBusy(true);
+    setError(null);
+    setNotice(null);
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const category of categories) {
+      if (!selectedIds.has(category.id)) continue;
+      const result = await api.updateCategory(category.id, {
+        name: category.name,
+        slug: category.slug,
+        description: category.description ?? null,
+        active,
+      });
+      if (result.ok) successCount += 1;
+      else failCount += 1;
+    }
+
+    setBulkBusy(false);
+    setSelectedIds(new Set());
+    await load();
+    setNotice(
+      `${successCount} categoria(s) ${active ? 'ativada(s)' : 'inativada(s)'}.` +
+        (failCount > 0 ? ` ${failCount} falharam.` : ''),
+    );
+  };
+
+  /** Exclui em lote; o backend bloqueia (409) categorias com vínculos. */
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    const confirmed = window.confirm(
+      `Excluir ${selectedIds.size} categoria(s)? Categorias com subcategorias ou produtos vinculados serão preservadas.`,
+    );
+    if (!confirmed) return;
+
+    setBulkBusy(true);
+    setError(null);
+    setNotice(null);
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const id of selectedIds) {
+      const result = await api.deleteCategory(id);
+      if (result.ok) successCount += 1;
+      else failCount += 1;
+    }
+
+    setBulkBusy(false);
+    setSelectedIds(new Set());
+    await load();
+    setNotice(`${successCount} categoria(s) excluída(s).`);
+    if (failCount > 0) {
+      setError(
+        `${failCount} categoria(s) não puderam ser excluídas (possuem produtos ou subcategorias vinculados).`,
+      );
+    }
+  };
+
   if (!isAdmin) return null;
 
   return (
@@ -148,6 +233,51 @@ export default function AdminCategoriesPage() {
       <p className="text-sm font-semibold uppercase tracking-[0.16em] text-accent">Catálogo</p>
       <h1 className="mt-2 text-3xl font-bold text-foreground">Categorias</h1>
       <p className="mt-2 text-muted-foreground">Organize as categorias da loja.</p>
+
+      {/* Ações em lote */}
+      {selectedIds.size > 0 && (
+        <div className="mt-6 rounded-xl border-border bg-accent/10 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span className="text-sm font-semibold text-foreground">
+              {selectedIds.size} categoria(s) selecionada(s)
+            </span>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void handleBulkActive(true)}
+                disabled={bulkBusy}
+                className="rounded-lg border-border bg-background px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-60"
+              >
+                Ativar
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleBulkActive(false)}
+                disabled={bulkBusy}
+                className="rounded-lg border-border bg-background px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-60"
+              >
+                Desativar
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleBulkDelete()}
+                disabled={bulkBusy}
+                className="rounded-lg bg-error px-4 py-2 text-sm font-semibold text-white hover:bg-error/90 disabled:opacity-60"
+              >
+                {bulkBusy ? 'Processando...' : 'Excluir selecionadas'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedIds(new Set())}
+                disabled={bulkBusy}
+                className="rounded-lg border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-60"
+              >
+                Limpar seleção
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="mt-8 grid gap-6 lg:grid-cols-[380px_1fr]">
         {/* Formulário */}
@@ -238,6 +368,15 @@ export default function AdminCategoriesPage() {
               <table className="w-full text-sm">
                 <thead className="border-b border-border bg-muted/50">
                   <tr>
+                    <th className="w-10 px-4 py-3 text-left">
+                      <input
+                        type="checkbox"
+                        checked={allSelected}
+                        onChange={(e) => toggleSelectAll(e.target.checked)}
+                        aria-label="Selecionar todas as categorias"
+                        className="rounded border-input"
+                      />
+                    </th>
                     <th className="px-4 py-3 text-left font-semibold text-foreground">Nome</th>
                     <th className="px-4 py-3 text-left font-semibold text-foreground">Slug</th>
                     <th className="px-4 py-3 text-left font-semibold text-foreground">Status</th>
@@ -247,6 +386,15 @@ export default function AdminCategoriesPage() {
                 <tbody>
                   {categories.map((category) => (
                     <tr key={category.id} className="border-b border-border">
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(category.id)}
+                          onChange={(e) => toggleSelected(category.id, e.target.checked)}
+                          aria-label={`Selecionar ${category.name}`}
+                          className="rounded border-input"
+                        />
+                      </td>
                       <td className="px-4 py-3 text-foreground">{category.name}</td>
                       <td className="px-4 py-3 text-muted-foreground">{category.slug}</td>
                       <td className="px-4 py-3">

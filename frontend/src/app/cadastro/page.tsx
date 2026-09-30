@@ -6,10 +6,11 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/Button';
 import { inputClassName } from '@/components/ui/Input';
+import { GoogleLogin } from '@react-oauth/google';
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { register, isAuthenticated } = useAuth();
+  const { register, googleLogin, isAuthenticated } = useAuth();
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -64,6 +65,26 @@ export default function RegisterPage() {
       router.push('/loja');
     } else {
       setError(result.error || 'Erro ao criar conta');
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async (credentialResponse: { credential?: string }) => {
+    if (!credentialResponse.credential) {
+      setError('Erro ao fazer login com Google');
+      setLoading(false);
+      return;
+    }
+
+    setError('');
+    setLoading(true);
+
+    const result = await googleLogin(credentialResponse.credential);
+
+    if (result.success) {
+      router.push('/loja');
+    } else {
+      setError(result.error || 'Erro ao fazer login com Google');
       setLoading(false);
     }
   };
@@ -197,6 +218,29 @@ export default function RegisterPage() {
             >
               {loading ? 'Criando conta...' : 'Criar conta'}
             </Button>
+          </div>
+
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="bg-card px-2 text-muted-foreground">ou continue com</span>
+            </div>
+          </div>
+
+          <div className="flex justify-center">
+            <GoogleLogin
+              onSuccess={handleGoogleLogin}
+              onError={() => {
+                setError('Erro ao fazer login com Google');
+                setLoading(false);
+              }}
+              theme="outline"
+              size="large"
+              text="continue_with"
+              useOneTap={false}
+            />
           </div>
 
           <div className="text-center">

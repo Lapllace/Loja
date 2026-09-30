@@ -37,6 +37,13 @@ export default function AdminUsersPage() {
   const [search, setSearch] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
 
+  // Ações em lote (sem endpoint bulk no backend: percorremos os IDs
+  // selecionados com PATCH /users/:id/role-status e DELETE /users/:id).
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkStatus, setBulkStatus] = useState('');
+  const [bulkRole, setBulkRole] = useState('');
+  const [bulkBusy, setBulkBusy] = useState(false);
+
   const load = useCallback(async () => {
     const result = await api.getUsers({ next: { revalidate: 0 } });
     if (result.ok) setUsers(result.data);
@@ -110,6 +117,112 @@ export default function AdminUsersPage() {
     return `${target.name} ${target.email} ${target.cpf ?? ''}`.toLowerCase().includes(term);
   });
 
+  // ---- Ações em lote -------------------------------------------------------
+  // O próprio usuário logado nunca entra na seleção: evita autobloqueio ou
+  // rebaixamento acidental da própria conta.
+  const selectable = filtered.filter((target) => target.id !== currentUser?.id);
+  const allSelected =
+    selectable.length > 0 && selectable.every((target) => selectedIds.has(target.id));
+
+  const toggleSelected = (id: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = (checked: boolean) => {
+    setSelectedIds(checked ? new Set(selectable.map((target) => target.id)) : new Set());
+  };
+
+  /** Altera o status em lote (ADMIN e OWNER). */
+  const handleBulkStatus = async () => {
+    if (selectedIds.size === 0 || !bulkStatus) return;
+
+    setBulkBusy(true);
+    setError(null);
+    setNotice(null);
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const target of users ?? []) {
+      if (!selectedIds.has(target.id)) continue;
+      const result = await api.updateUserRoleStatus(target.id, { status: bulkStatus });
+      if (result.ok) successCount += 1;
+      else failCount += 1;
+    }
+
+    setBulkBusy(false);
+    setSelectedIds(new Set());
+    setBulkStatus('');
+    await load();
+    setNotice(`${successCount} usuário(s) com status atualizado.`);
+    if (failCount > 0) {
+      setError(`${failCount} usuário(s) não puderam ser atualizados (verifique suas permissões).`);
+    }
+  };
+
+  /** Altera a role em lote — exclusivo do OWNER (regra do backend). */
+  const handleBulkRole = async () => {
+    if (!isOwner || selectedIds.size === 0 || !bulkRole) return;
+
+    setBulkBusy(true);
+    setError(null);
+    setNotice(null);
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const target of users ?? []) {
+      if (!selectedIds.has(target.id)) continue;
+      const result = await api.updateUserRoleStatus(target.id, { role: bulkRole });
+      if (result.ok) successCount += 1;
+      else failCount += 1;
+    }
+
+    setBulkBusy(false);
+    setSelectedIds(new Set());
+    setBulkRole('');
+    await load();
+    setNotice(`${successCount} usuário(s) com role atualizada.`);
+    if (failCount > 0) {
+      setError(`${failCount} usuário(s) não puderam ter a role alterada (somente OWNER pode).`);
+    }
+  };
+
+  /** Exclui em lote respeitando a hierarquia (ADMIN só remove CUSTOMER). */
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    const confirmed = window.confirm(
+      `Excluir ${selectedIds.size} usuário(s)? ADMIN remove apenas clientes; OWNER remove qualquer conta.`,
+    );
+    if (!confirmed) return;
+
+    setBulkBusy(true);
+    setError(null);
+    setNotice(null);
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const id of selectedIds) {
+      const result = await api.deleteUser(id);
+      if (result.ok) successCount += 1;
+      else failCount += 1;
+    }
+
+    setBulkBusy(false);
+    setSelectedIds(new Set());
+    await load();
+    setNotice(`${successCount} usuário(s) removido(s).`);
+    if (failCount > 0) {
+      setError(`${failCount} usuário(s) não puderam ser removidos (regras de role do backend).`);
+    }
+  };
+
   return (
     <div>
       <p className="text-sm font-semibold uppercase tracking-[0.16em] text-accent">Clientes</p>
@@ -137,6 +250,81 @@ export default function AdminUsersPage() {
         className="mt-6 w-full max-w-sm rounded-lg border-input bg-background px-3 py-2 text-sm text-foreground"
       />
 
+      {/* Ações em lote */}
+      {selectedIds.size > 0 && (
+        <div className="mt-6 rounded-xl border-border bg-accent/10 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span className="text-sm font-semibold text-foreground">
+              {selectedIds.size} usuário(s) selecionado(s)
+            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={bulkStatus}
+                onChange={(e) => setBulkStatus(e.target.value)}
+                disabled={bulkBusy}
+                aria-label="Status em lote"
+                className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground disabled:opacity-60"
+              >
+                <option value="">Status...</option>
+                <option value="ACTIVE">Ativo</option>
+                <option value="PENDING">Pendente</option>
+                <option value="BLOCKED">Bloqueado</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => void handleBulkStatus()}
+                disabled={bulkBusy || !bulkStatus}
+                className="rounded-lg border-border bg-background px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-60"
+              >
+                Aplicar status
+              </button>
+
+              {isOwner && (
+                <>
+                  <select
+                    value={bulkRole}
+                    onChange={(e) => setBulkRole(e.target.value)}
+                    disabled={bulkBusy}
+                    aria-label="Role em lote"
+                    className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground disabled:opacity-60"
+                  >
+                    <option value="">Role...</option>
+                    <option value="CUSTOMER">Cliente</option>
+                    <option value="ADMIN">Administrador</option>
+                    <option value="OWNER">Proprietário</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => void handleBulkRole()}
+                    disabled={bulkBusy || !bulkRole}
+                    className="rounded-lg border-border bg-background px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-60"
+                  >
+                    Aplicar role
+                  </button>
+                </>
+              )}
+
+              <button
+                type="button"
+                onClick={() => void handleBulkDelete()}
+                disabled={bulkBusy}
+                className="rounded-lg bg-error px-4 py-2 text-sm font-semibold text-white hover:bg-error/90 disabled:opacity-60"
+              >
+                {bulkBusy ? 'Processando...' : 'Excluir selecionados'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedIds(new Set())}
+                disabled={bulkBusy}
+                className="rounded-lg border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-60"
+              >
+                Limpar seleção
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mt-6">
         {users === null ? (
           <LoadingState message="Carregando usuários..." className="min-h-[200px]" />
@@ -149,6 +337,15 @@ export default function AdminUsersPage() {
             <table className="w-full text-sm">
               <thead className="border-b border-border bg-muted/50">
                 <tr>
+                  <th className="w-10 px-4 py-3 text-left">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={(e) => toggleSelectAll(e.target.checked)}
+                      aria-label="Selecionar todos os usuários"
+                      className="rounded border-input"
+                    />
+                  </th>
                   <th className="px-4 py-3 text-left font-semibold text-foreground">Usuário</th>
                   <th className="px-4 py-3 text-left font-semibold text-foreground">Role</th>
                   <th className="px-4 py-3 text-left font-semibold text-foreground">Status</th>
@@ -158,6 +355,21 @@ export default function AdminUsersPage() {
               <tbody>
                 {filtered.map((target) => (
                   <tr key={target.id} className="border-b border-border">
+                    <td className="px-4 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(target.id)}
+                        disabled={target.id === currentUser?.id}
+                        onChange={(e) => toggleSelected(target.id, e.target.checked)}
+                        aria-label={`Selecionar ${target.name}`}
+                        title={
+                          target.id === currentUser?.id
+                            ? 'Você não pode aplicar ações em lote na própria conta'
+                            : undefined
+                        }
+                        className="rounded border-input disabled:opacity-40"
+                      />
+                    </td>
                     <td className="px-4 py-3">
                       <p className="font-medium text-foreground">{target.name}</p>
                       <p className="text-xs text-muted-foreground">{target.email}</p>

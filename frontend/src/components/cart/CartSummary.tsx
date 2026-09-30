@@ -52,6 +52,13 @@ export function CartSummary({
             className="w-full"
             onClick={onCheckout}
             disabled={!isAuthenticated || itemsCount === 0}
+            title={
+              !isAuthenticated
+                ? 'Faça login para finalizar'
+                : itemsCount === 0
+                  ? 'Adicione produtos ao carrinho'
+                  : undefined
+            }
           >
             Finalizar compra
           </Button>

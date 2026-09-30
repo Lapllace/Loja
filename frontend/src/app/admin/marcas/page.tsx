@@ -47,9 +47,16 @@ export default function AdminBrandsPage() {
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Brand | null>(null);
 
+  // Ações em lote (sem endpoint bulk no backend: percorremos os IDs
+  // selecionados com os endpoints PATCH/DELETE existentes).
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+
   const load = useCallback(async () => {
     const data = await api.getBrands({ next: { revalidate: 0 } });
     setBrands(data);
+    // A lista foi refeita: manter seleção de itens que não existem mais confunde.
+    setSelectedIds(new Set());
     setLoading(false);
   }, []);
 
@@ -134,6 +141,85 @@ export default function AdminBrandsPage() {
     void load();
   };
 
+  const toggleSelected = (id: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const allSelected = brands.length > 0 && selectedIds.size === brands.length;
+
+  const toggleSelectAll = (checked: boolean) => {
+    setSelectedIds(checked ? new Set(brands.map((brand) => brand.id)) : new Set());
+  };
+
+  /** Ativa/desativa em lote reutilizando PATCH /brands/:id. */
+  const handleBulkActive = async (active: boolean) => {
+    if (selectedIds.size === 0) return;
+    setBulkBusy(true);
+    setError(null);
+    setNotice(null);
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const brand of brands) {
+      if (!selectedIds.has(brand.id)) continue;
+      const result = await api.updateBrand(brand.id, {
+        name: brand.name,
+        slug: brand.slug,
+        description: brand.description ?? null,
+        website: brand.website ?? null,
+        active,
+      });
+      if (result.ok) successCount += 1;
+      else failCount += 1;
+    }
+
+    setBulkBusy(false);
+    setSelectedIds(new Set());
+    await load();
+    setNotice(
+      `${successCount} marca(s) ${active ? 'ativada(s)' : 'inativada(s)'}.` +
+        (failCount > 0 ? ` ${failCount} falharam.` : ''),
+    );
+  };
+
+  /** Exclui em lote; o backend bloqueia (409) marcas com produtos vinculados. */
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    const confirmed = window.confirm(
+      `Excluir ${selectedIds.size} marca(s)? Marcas com produtos vinculados serão preservadas.`,
+    );
+    if (!confirmed) return;
+
+    setBulkBusy(true);
+    setError(null);
+    setNotice(null);
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const id of selectedIds) {
+      const result = await api.deleteBrand(id);
+      if (result.ok) successCount += 1;
+      else failCount += 1;
+    }
+
+    setBulkBusy(false);
+    setSelectedIds(new Set());
+    await load();
+    setNotice(`${successCount} marca(s) excluída(s).`);
+    if (failCount > 0) {
+      setError(
+        `${failCount} marca(s) não puderam ser excluídas (possuem produtos vinculados).`,
+      );
+    }
+  };
+
   if (!isAdmin) return null;
 
   return (
@@ -141,6 +227,51 @@ export default function AdminBrandsPage() {
       <p className="text-sm font-semibold uppercase tracking-[0.16em] text-accent">Catálogo</p>
       <h1 className="mt-2 text-3xl font-bold text-foreground">Marcas</h1>
       <p className="mt-2 text-muted-foreground">Gerencie as marcas dos produtos.</p>
+
+      {/* Ações em lote */}
+      {selectedIds.size > 0 && (
+        <div className="mt-6 rounded-xl border-border bg-accent/10 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span className="text-sm font-semibold text-foreground">
+              {selectedIds.size} marca(s) selecionada(s)
+            </span>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void handleBulkActive(true)}
+                disabled={bulkBusy}
+                className="rounded-lg border-border bg-background px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-60"
+              >
+                Ativar
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleBulkActive(false)}
+                disabled={bulkBusy}
+                className="rounded-lg border-border bg-background px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-60"
+              >
+                Desativar
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleBulkDelete()}
+                disabled={bulkBusy}
+                className="rounded-lg bg-error px-4 py-2 text-sm font-semibold text-white hover:bg-error/90 disabled:opacity-60"
+              >
+                {bulkBusy ? 'Processando...' : 'Excluir selecionadas'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedIds(new Set())}
+                disabled={bulkBusy}
+                className="rounded-lg border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-60"
+              >
+                Limpar seleção
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="mt-8 grid gap-6 lg:grid-cols-[380px_1fr]">
         <form onSubmit={handleSubmit} className="h-fit rounded-xl border-border bg-card p-5">
@@ -235,6 +366,15 @@ export default function AdminBrandsPage() {
               <table className="w-full text-sm">
                 <thead className="border-b border-border bg-muted/50">
                   <tr>
+                    <th className="w-10 px-4 py-3 text-left">
+                      <input
+                        type="checkbox"
+                        checked={allSelected}
+                        onChange={(e) => toggleSelectAll(e.target.checked)}
+                        aria-label="Selecionar todas as marcas"
+                        className="rounded border-input"
+                      />
+                    </th>
                     <th className="px-4 py-3 text-left font-semibold text-foreground">Nome</th>
                     <th className="px-4 py-3 text-left font-semibold text-foreground">Slug</th>
                     <th className="px-4 py-3 text-left font-semibold text-foreground">Status</th>
@@ -244,6 +384,15 @@ export default function AdminBrandsPage() {
                 <tbody>
                   {brands.map((brand) => (
                     <tr key={brand.id} className="border-b border-border">
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(brand.id)}
+                          onChange={(e) => toggleSelected(brand.id, e.target.checked)}
+                          aria-label={`Selecionar ${brand.name}`}
+                          className="rounded border-input"
+                        />
+                      </td>
                       <td className="px-4 py-3 text-foreground">{brand.name}</td>
                       <td className="px-4 py-3 text-muted-foreground">{brand.slug}</td>
                       <td className="px-4 py-3">

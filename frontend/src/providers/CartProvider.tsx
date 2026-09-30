@@ -21,12 +21,114 @@ import {
   useRef,
   ReactNode,
 } from 'react';
-import { Cart, CartMutationResult } from '@/lib/types';
+import { Cart, CartItem, CartMutationResult, Product } from '@/lib/types';
 import { api } from '@/lib/api';
 import { authManager, hydrateSessionFromStorage, readStoredToken } from '@/lib/auth';
-import { clearCartStorage, readCartStorage, writeCartStorage } from '@/lib/cart-storage';
+import {
+  clearCartStorage,
+  readCartStorage,
+  writeCartStorage,
+  readGuestCart,
+  writeGuestCart,
+  clearGuestCart,
+  type GuestCartItem,
+} from '@/lib/cart-storage';
+import { toNumber } from '@/lib/utils';
 
 type Status = 'idle' | 'loading' | 'success' | 'error';
+
+/**
+ * Resultado da consulta de um produto do carrinho de convidado.
+ *
+ * - `missing`: o produto não existe mais (404) → o item é descartado;
+ * - `unavailable`: a API não respondeu (rede/timeout/5xx) → o item é mantido
+ *   sem preço, em vez de apagar dados do visitante;
+ * - `ok`: produto carregado, pronto para hidratar nome/imagem/preço/estoque.
+ */
+type GuestProductLookup =
+  | { status: 'ok'; product: Product }
+  | { status: 'missing' }
+  | { status: 'unavailable' };
+
+/**
+ * Cache em memória dos produtos usados para hidratar o carrinho de convidado.
+ * Evita repetir `GET /products/:id` a cada render/abertura da gaveta. É
+ * limpo em `refresh()`/clear e nunca guarda falhas de rede.
+ */
+const guestProductCache = new Map<string, GuestProductLookup>();
+
+async function lookupGuestProduct(productId: string, fresh = false): Promise<GuestProductLookup> {
+  if (!fresh) {
+    const cached = guestProductCache.get(productId);
+    if (cached) return cached;
+  }
+
+  try {
+    const product = await api.getProductById(productId, { next: { revalidate: 0 } });
+    const result: GuestProductLookup = product ? { status: 'ok', product } : { status: 'missing' };
+    guestProductCache.set(productId, result);
+    return result;
+  } catch {
+    // API indisponível: não descarta o item nem reescreve o storage.
+    return { status: 'unavailable' };
+  }
+}
+
+/**
+ * Monta o carrinho visível do visitante.
+ *
+ * O localStorage guarda apenas `{ productId, quantity }`; nome, imagem, preço e
+ * estoque vêm SEMPRE do backend (`GET /products/:id`, rota pública). Assim a
+ * lista e o total aparecem corretos sem exigir login — e nenhum preço é
+ * inventado no cliente.
+ */
+async function buildGuestCart(items: GuestCartItem[]): Promise<Cart> {
+  const hydrated: CartItem[] = [];
+  const kept: GuestCartItem[] = [];
+
+  for (const item of items) {
+    const lookup = await lookupGuestProduct(item.productId);
+
+    if (lookup.status === 'missing') continue;
+
+    if (lookup.status === 'unavailable') {
+      kept.push(item);
+      hydrated.push({
+        id: `guest-${item.productId}`,
+        productId: item.productId,
+        quantity: item.quantity,
+      });
+      continue;
+    }
+
+    const product = lookup.product;
+    const quantity = Math.max(1, Math.min(item.quantity, Math.max(product.stock, 1)));
+
+    kept.push({ productId: item.productId, quantity });
+    hydrated.push({
+      id: `guest-${product.id}`,
+      productId: product.id,
+      quantity,
+      name: product.name,
+      imageUrl: product.images?.[0]?.url ?? null,
+      price: product.price,
+      product,
+    });
+  }
+
+  const changed =
+    kept.length !== items.length ||
+    kept.some((item, index) => item.quantity !== items[index]?.quantity);
+  if (changed) writeGuestCart(kept);
+
+  const totalItems = hydrated.reduce((sum, item) => sum + item.quantity, 0);
+  const totalAmount = hydrated.reduce((sum, item) => {
+    const unitPrice = toNumber(item.price) ?? 0;
+    return sum + unitPrice * item.quantity;
+  }, 0);
+
+  return { items: hydrated, totalItems, totalAmount };
+}
 
 type State = {
   cart: Cart | null;
@@ -149,10 +251,18 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const load = useCallback(
     async (options: { force?: boolean } = {}): Promise<CartOperationResult> => {
       const token = authManager.getToken() ?? readStoredToken();
+      // Toda chamada de load invalida as anteriores — inclusive a do visitante.
+      const loadId = ++loadIdRef.current;
 
       if (!token) {
+        // Visitante: o carrinho vive no localStorage e é hidratado pelo backend
+        // (nome, imagem, preço e estoque) para que a lista e o total apareçam
+        // imediatamente, sem exigir login.
         clearCartStorage();
-        dispatch({ type: 'RESET' });
+        if (options.force) guestProductCache.clear();
+        const guestCart = await buildGuestCart(readGuestCart());
+        if (loadId !== loadIdRef.current) return { success: true };
+        dispatch({ type: 'LOAD_SUCCESS', cart: guestCart });
         return { success: true };
       }
 
@@ -165,7 +275,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      const loadId = ++loadIdRef.current;
       dispatch({ type: 'LOAD_START' });
 
       const result = await api.getCart(token);
@@ -192,6 +301,35 @@ export function CartProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  // Callback para mesclar carrinho de convidado ao fazer login
+  const mergeGuestCart = useCallback(async (token: string) => {
+    const guestItems = readGuestCart();
+    if (guestItems.length === 0) return;
+
+    for (const item of guestItems) {
+      try {
+        await api.addToCart(item.productId, item.quantity, token);
+      } catch (error) {
+        console.error('Failed to merge guest cart item:', error);
+      }
+    }
+
+    clearGuestCart();
+    guestProductCache.clear();
+    await load({ force: true });
+  }, [load]);
+
+  // Registrar callback pós-login para fusão do carrinho
+  useEffect(() => {
+    const unsubscribe = authManager.onPostLogin(async () => {
+      const token = authManager.getToken();
+      if (token) {
+        await mergeGuestCart(token);
+      }
+    });
+    return unsubscribe;
+  }, [mergeGuestCart]);
+
   // Hidrata a sessão do localStorage no mount: o singleton de auth.ts pode ter
   // sido criado durante o SSR, quando `window` ainda não existia.
   useEffect(() => {
@@ -202,8 +340,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
       if (authManager.isAuthenticated()) {
         void load({ force: true });
       } else {
+        // Logout: descarta o cache autenticado e volta a exibir o carrinho de
+        // convidado hidratado (mesmo vazio), em vez de simplesmente sumir.
         clearCartStorage();
-        dispatch({ type: 'RESET' });
+        void load({ force: true });
       }
     });
 
@@ -213,17 +353,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
     };
   }, [load]);
 
-  // Carrega o carrinho assim que houver sessão autenticada.
+  // Carrega o carrinho no primeiro render do client: autenticado (GET /cart) ou
+  // visitante (localStorage hidratado pelo backend). Sem isto, o carrinho do
+  // visitante só apareceria depois de uma nova ação — nunca no reload.
   useEffect(() => {
     const authenticated = authManager.isAuthenticated();
     dispatch({ type: 'AUTH', authenticated });
-
-    if (authenticated) {
-      void load();
-    } else {
-      clearCartStorage();
-      dispatch({ type: 'RESET' });
-    }
+    void load();
   }, [load]);
 
   /**
@@ -276,31 +412,109 @@ export function CartProvider({ children }: { children: ReactNode }) {
   );
 
   const addItem = useCallback(
-    (productId: string, quantity = 1) =>
-      mutate(
+    async (productId: string, quantity = 1) => {
+      const token = authManager.getToken() ?? readStoredToken();
+
+      if (!token) {
+        // Visitante: só adiciona depois de confirmar existência e estoque no
+        // backend (não existe carrinho server-side sem token).
+        const lookup = await lookupGuestProduct(productId, true);
+        if (lookup.status !== 'ok') {
+          const error =
+            lookup.status === 'missing'
+              ? 'Produto indisponível.'
+              : 'Não foi possível validar o produto agora.';
+          dispatch({ type: 'MUTATE_ERROR', error });
+          return { success: false, error };
+        }
+
+        const guestItems = readGuestCart();
+        const existing = guestItems.find((item) => item.productId === productId);
+        const desired = (existing?.quantity ?? 0) + quantity;
+
+        if (lookup.product.stock <= 0 || desired > lookup.product.stock) {
+          const error = 'Quantidade indisponível em estoque.';
+          dispatch({ type: 'MUTATE_ERROR', error });
+          return { success: false, error };
+        }
+
+        const updated = existing
+          ? guestItems.map((item) =>
+              item.productId === productId ? { ...item, quantity: desired } : item,
+            )
+          : [...guestItems, { productId, quantity: desired }];
+
+        writeGuestCart(updated);
+        dispatch({ type: 'LOAD_SUCCESS', cart: await buildGuestCart(updated) });
+        return { success: true };
+      }
+
+      return mutate(
         (token) => api.addToCart(productId, quantity, token),
         'Não foi possível adicionar o produto ao carrinho.',
-      ),
+      );
+    },
     [mutate],
   );
 
   const updateItem = useCallback(
-    (productId: string, quantity: number) =>
-      mutate(
+    async (productId: string, quantity: number) => {
+      const token = authManager.getToken() ?? readStoredToken();
+
+      if (!token) {
+        const lookup = await lookupGuestProduct(productId, true);
+        if (lookup.status === 'ok' && quantity > lookup.product.stock) {
+          const error = 'Quantidade indisponível em estoque.';
+          dispatch({ type: 'MUTATE_ERROR', error });
+          return { success: false, error };
+        }
+
+        const guestItems = readGuestCart();
+        const updated = guestItems.map((item) =>
+          item.productId === productId ? { ...item, quantity } : item,
+        );
+        writeGuestCart(updated);
+        dispatch({ type: 'LOAD_SUCCESS', cart: await buildGuestCart(updated) });
+        return { success: true };
+      }
+
+      return mutate(
         (token) => api.updateCartItem(productId, quantity, token),
         'Não foi possível atualizar a quantidade.',
-      ),
+      );
+    },
     [mutate],
   );
 
   const removeItem = useCallback(
-    (productId: string) =>
-      mutate((token) => api.removeCartItem(productId, token), 'Não foi possível remover o item.'),
+    async (productId: string) => {
+      const token = authManager.getToken() ?? readStoredToken();
+
+      if (!token) {
+        const updated = readGuestCart().filter((item) => item.productId !== productId);
+        writeGuestCart(updated);
+        dispatch({ type: 'LOAD_SUCCESS', cart: await buildGuestCart(updated) });
+        return { success: true };
+      }
+
+      return mutate((token) => api.removeCartItem(productId, token), 'Não foi possível remover o item.');
+    },
     [mutate],
   );
 
   const clearCart = useCallback(
-    () => mutate((token) => api.clearCart(token), 'Não foi possível limpar o carrinho.'),
+    () => {
+      const token = authManager.getToken() ?? readStoredToken();
+
+      if (!token) {
+        clearGuestCart();
+        guestProductCache.clear();
+        dispatch({ type: 'RESET' });
+        return Promise.resolve({ success: true });
+      }
+
+      return mutate((token) => api.clearCart(token), 'Não foi possível limpar o carrinho.');
+    },
     [mutate],
   );
 

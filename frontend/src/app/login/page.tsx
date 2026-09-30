@@ -6,10 +6,11 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/Button';
 import { inputClassName } from '@/components/ui/Input';
+import { GoogleLogin } from '@react-oauth/google';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, isAuthenticated } = useAuth();
+  const { login, googleLogin, isAuthenticated } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
@@ -34,6 +35,26 @@ export default function LoginPage() {
       router.push('/loja');
     } else {
       setError(result.error || 'Erro ao fazer login');
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async (credentialResponse: { credential?: string }) => {
+    if (!credentialResponse.credential) {
+      setError('Erro ao fazer login com Google');
+      setLoading(false);
+      return;
+    }
+
+    setError('');
+    setLoading(true);
+
+    const result = await googleLogin(credentialResponse.credential);
+
+    if (result.success) {
+      router.push('/loja');
+    } else {
+      setError(result.error || 'Erro ao fazer login com Google');
       setLoading(false);
     }
   };
@@ -114,6 +135,29 @@ export default function LoginPage() {
             >
               {loading ? 'Entrando...' : 'Entrar'}
             </Button>
+          </div>
+
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="bg-card px-2 text-muted-foreground">ou continue com</span>
+            </div>
+          </div>
+
+          <div className="flex justify-center">
+            <GoogleLogin
+              onSuccess={handleGoogleLogin}
+              onError={() => {
+                setError('Erro ao fazer login com Google');
+                setLoading(false);
+              }}
+              theme="outline"
+              size="large"
+              text="continue_with"
+              useOneTap={false}
+            />
           </div>
 
           <div className="text-center">

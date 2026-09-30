@@ -376,8 +376,8 @@ export default function NewProductPage() {
   return (
     <main className="container-custom py-8 md:py-12">
       <nav aria-label="Você está aqui" className="mb-4 text-sm text-muted-foreground">
-        <Link href="/" className="hover:text-accent">
-          Início
+        <Link href="/admin/dashboard" className="hover:text-accent">
+          Painel Admin
         </Link>
         <span className="mx-2" aria-hidden="true">
           /
@@ -791,7 +791,7 @@ export default function NewProductPage() {
             <Button
               type="button"
               variant="ghost"
-              onClick={() => router.push('/loja')}
+              onClick={() => router.push('/admin/dashboard')}
               disabled={saving}
             >
               Cancelar

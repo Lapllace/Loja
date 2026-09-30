@@ -178,6 +178,8 @@ export interface Order {
   discount: number | string;
   total: number | string;
   notes?: string | null;
+  /** Nome da opção de frete escolhida no checkout (ex.: "Motoboy / Entrega Local"). */
+  shippingOptionName?: string | null;
   createdAt: string;
   updatedAt: string;
   items?: OrderItem[];
@@ -191,6 +193,22 @@ export interface Order {
     state: string;
     zipcode: string;
   };
+}
+
+/** Uma opção de frete retornada por POST /shipping/calculate. */
+export interface ShippingOption {
+  id: string;
+  name: string;
+  price: number;
+  /** Prazo em dias úteis; `null` quando a transportadora não informa. */
+  deliveryDays: number | null;
+  isLocal?: boolean;
+}
+
+export interface ShippingQuote {
+  options: ShippingOption[];
+  /** 'superfrete' = API real; 'fallback' = frete fixo por região. */
+  source: 'superfrete' | 'fallback';
 }
 
 export interface Payment {

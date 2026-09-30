@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -15,6 +16,7 @@ import {
   UserRole,
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import { MetaWhatsappService } from '../notifications/meta-whatsapp.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 
@@ -29,9 +31,24 @@ type ValidatedOrderItem = {
   itemTotal: Prisma.Decimal;
 };
 
+/** Formata um valor Decimal/number/string para "R$ 0,00". */
+function brl(value: Prisma.Decimal | number | string): string {
+  const n =
+    typeof value === 'object' ? Number(value.toString()) : Number(value);
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(n);
+}
+
 @Injectable()
 export class OrdersService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(OrdersService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly whatsapp: MetaWhatsappService,
+  ) {}
 
   private serializeItem(item: OrderItem, includeCostPrice: boolean) {
     const base: Record<string, unknown> = {
@@ -75,6 +92,7 @@ export class OrdersService {
       shippingCity: order.shippingCity,
       shippingState: order.shippingState,
       shippingReference: order.shippingReference,
+      shippingOptionName: order.shippingOptionName,
       createdAt: order.createdAt,
       updatedAt: order.updatedAt,
       items: (order.items ?? []).map((item) =>
@@ -176,6 +194,104 @@ export class OrdersService {
     }
   }
 
+  // ── Notification helpers ────────────────────────────────────────────────────
+
+  /**
+   * Busca o telefone do dono do pedido e dispara notificação.
+   * Fire-and-forget: erros são absorvidos para não impactar o fluxo de negócio.
+   */
+  private fireOrderCreated(
+    orderId: string,
+    orderNumber: number,
+    total: Prisma.Decimal,
+  ): void {
+    void (async () => {
+      try {
+        const order = await this.prisma.order.findUnique({
+          where: { id: orderId },
+          include: { user: { select: { phone: true, name: true } } },
+        });
+        const phone = order?.user?.phone;
+        if (!phone) return;
+
+        const message =
+          `✅ *Pedido #${orderNumber} recebido!*\n\n` +
+          `Total: *${brl(total)}*\n\n` +
+          `Aguardando confirmação do pagamento.\n` +
+          `Acesse o aplicativo do seu banco e pague via PIX Copia e Cola — ` +
+          `o código está disponível na tela de confirmação do pedido.`;
+
+        await this.whatsapp.sendTextMessage(phone, message);
+      } catch (err) {
+        this.logger.warn(
+          `Notification (order created) failed silently: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    })();
+  }
+
+  private firePaymentConfirmed(orderId: string, orderNumber: number): void {
+    void (async () => {
+      try {
+        const order = await this.prisma.order.findUnique({
+          where: { id: orderId },
+          include: { user: { select: { phone: true } } },
+        });
+        const phone = order?.user?.phone;
+        if (!phone) return;
+
+        const message =
+          `🎉 *Pagamento confirmado — Pedido #${orderNumber}!*\n\n` +
+          `Seu pedido foi pago e já está em preparação.\n` +
+          `Em breve você receberá o código de rastreio.`;
+
+        await this.whatsapp.sendTextMessage(phone, message);
+      } catch (err) {
+        this.logger.warn(
+          `Notification (payment confirmed) failed silently: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    })();
+  }
+
+  private fireOrderShipped(orderId: string, orderNumber: number): void {
+    void (async () => {
+      try {
+        const [orderRow, delivery] = await Promise.all([
+          this.prisma.order.findUnique({
+            where: { id: orderId },
+            include: { user: { select: { phone: true } } },
+          }),
+          this.prisma.delivery.findUnique({
+            where: { orderId },
+            select: { trackingCode: true, trackingUrl: true },
+          }),
+        ]);
+
+        const phone = orderRow?.user?.phone;
+        if (!phone) return;
+
+        const trackingLine = delivery?.trackingCode
+          ? `\n\n📦 *Código de rastreio:* ${delivery.trackingCode}` +
+            (delivery.trackingUrl ? `\n🔗 ${delivery.trackingUrl}` : '')
+          : '';
+
+        const message =
+          `🚚 *Pedido #${orderNumber} enviado!*\n\n` +
+          `Seu pedido está a caminho.` +
+          trackingLine;
+
+        await this.whatsapp.sendTextMessage(phone, message);
+      } catch (err) {
+        this.logger.warn(
+          `Notification (order shipped) failed silently: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    })();
+  }
+
+  // ── Public methods ──────────────────────────────────────────────────────────
+
   async create(userId: string, data: CreateOrderDto) {
     const address = await this.prisma.address.findFirst({
       where: { id: data.addressId, userId },
@@ -199,7 +315,8 @@ export class OrdersService {
         tx,
         cart.items,
       );
-      const shipping = new Prisma.Decimal(0);
+      const shippingValue = data.shipping ?? 0;
+      const shipping = new Prisma.Decimal(shippingValue.toFixed(2));
       const discount = new Prisma.Decimal(0);
       const total = subtotal.sub(discount).add(shipping);
 
@@ -213,6 +330,7 @@ export class OrdersService {
           discount,
           total,
           notes: data.notes ?? null,
+          shippingOptionName: data.shippingOptionName ?? null,
           shippingRecipient: address.recipient,
           shippingZipcode: address.zipcode,
           shippingStreet: address.street,
@@ -237,6 +355,9 @@ export class OrdersService {
       if (!created) {
         throw new NotFoundException('Order not found after creation');
       }
+
+      // Dispara notificação fora da transação (fire-and-forget).
+      this.fireOrderCreated(order.id, order.number, total);
 
       return this.serializeOrder(created, { role: UserRole.CUSTOMER });
     });
@@ -318,10 +439,17 @@ export class OrdersService {
       include: { items: true },
     });
 
+    // Fire-and-forget notifications based on the new status.
+    if (data.status === OrderStatus.PAID) {
+      this.firePaymentConfirmed(updated.id, updated.number);
+    } else if (data.status === OrderStatus.SHIPPED) {
+      this.fireOrderShipped(updated.id, updated.number);
+    }
+
     return this.serializeOrder(updated, user);
   }
 
-  async remove(user: SerializedUser, id: string) {
+  remove(user: SerializedUser, id: string): never {
     void user;
     void id;
     throw new ForbiddenException(

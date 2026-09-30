@@ -40,6 +40,12 @@ export default function AdminOrdersPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  // Ações em lote (sem endpoint bulk no backend: percorremos os IDs
+  // selecionados com PATCH /orders/:id).
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkStatus, setBulkStatus] = useState('');
+  const [bulkBusy, setBulkBusy] = useState(false);
+
   useEffect(() => {
     if (loading) return;
     if (!isAuthenticated) {
@@ -56,6 +62,8 @@ export default function AdminOrdersPage() {
       const result = await api.getOrders();
       if (result.ok) {
         setOrders(result.data);
+        // A lista foi refeita: descarta seleção de pedidos que podem ter saído.
+        setSelectedIds(new Set());
       }
       setLoadingOrders(false);
     };
@@ -86,6 +94,56 @@ export default function AdminOrdersPage() {
     const ordersResult = await api.getOrders();
     if (ordersResult.ok) {
       setOrders(ordersResult.data);
+      setSelectedIds(new Set());
+    }
+  };
+
+  const toggleSelected = (id: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const allSelected = orders.length > 0 && selectedIds.size === orders.length;
+
+  const toggleSelectAll = (checked: boolean) => {
+    setSelectedIds(checked ? new Set(orders.map((order) => order.id)) : new Set());
+  };
+
+  /** Aplica um status a todos os pedidos selecionados (PATCH /orders/:id). */
+  const handleBulkStatus = async () => {
+    if (selectedIds.size === 0 || !bulkStatus) return;
+
+    setBulkBusy(true);
+    setError(null);
+    setSuccess(null);
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const order of orders) {
+      if (!selectedIds.has(order.id)) continue;
+      const result = await api.updateOrderStatus(order.id, { status: bulkStatus });
+      if (result.ok) successCount += 1;
+      else failCount += 1;
+    }
+
+    const ordersResult = await api.getOrders();
+    if (ordersResult.ok) setOrders(ordersResult.data);
+
+    setBulkBusy(false);
+    setSelectedIds(new Set());
+    setBulkStatus('');
+    if (successCount > 0) {
+      setSuccess(
+        `${successCount} pedido(s) atualizado(s) para ${STATUS_LABELS[bulkStatus] ?? bulkStatus}.`,
+      );
+    }
+    if (failCount > 0) {
+      setError(`${failCount} pedido(s) não puderam ser atualizados.`);
     }
   };
 
@@ -116,6 +174,49 @@ export default function AdminOrdersPage() {
         </div>
       )}
 
+      {/* Ações em lote */}
+      {selectedIds.size > 0 && (
+        <div className="mt-6 rounded-xl border-border bg-accent/10 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span className="text-sm font-semibold text-foreground">
+              {selectedIds.size} pedido(s) selecionado(s)
+            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={bulkStatus}
+                onChange={(e) => setBulkStatus(e.target.value)}
+                disabled={bulkBusy}
+                aria-label="Status em lote"
+                className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground disabled:opacity-60"
+              >
+                <option value="">Selecione o status...</option>
+                <option value="PENDING">Pendente</option>
+                <option value="PAID">Pago</option>
+                <option value="PROCESSING">Preparando</option>
+                <option value="SHIPPED">Enviado</option>
+                <option value="DELIVERED">Entregue</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => void handleBulkStatus()}
+                disabled={bulkBusy || !bulkStatus}
+                className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-ink hover:bg-accent-dark disabled:opacity-60"
+              >
+                {bulkBusy ? 'Aplicando...' : 'Aplicar status'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedIds(new Set())}
+                disabled={bulkBusy}
+                className="rounded-lg border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-60"
+              >
+                Limpar seleção
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mt-8">
         {loadingOrders ? (
           <LoadingState message="Carregando pedidos..." className="min-h-[200px]" />
@@ -128,6 +229,15 @@ export default function AdminOrdersPage() {
             <table className="w-full text-sm">
               <thead className="border-b border-border bg-muted/50">
                 <tr>
+                  <th className="w-10 px-4 py-3 text-left">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={(e) => toggleSelectAll(e.target.checked)}
+                      aria-label="Selecionar todos os pedidos"
+                      className="rounded border-input"
+                    />
+                  </th>
                   <th className="px-4 py-3 text-left font-semibold text-foreground">Nº</th>
                   <th className="px-4 py-3 text-left font-semibold text-foreground">Cliente</th>
                   <th className="px-4 py-3 text-left font-semibold text-foreground">Total</th>
@@ -139,6 +249,15 @@ export default function AdminOrdersPage() {
               <tbody>
                 {orders.map((order) => (
                   <tr key={order.id} className="border-b border-border">
+                    <td className="px-4 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(order.id)}
+                        onChange={(e) => toggleSelected(order.id, e.target.checked)}
+                        aria-label={`Selecionar pedido #${order.number}`}
+                        className="rounded border-input"
+                      />
+                    </td>
                     <td className="px-4 py-3 text-foreground font-medium">#{order.number}</td>
                     <td className="px-4 py-3 text-foreground">Cliente</td>
                     <td className="px-4 py-3 text-foreground">

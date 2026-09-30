@@ -1,13 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
 import { FormEvent, useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useCart } from '@/hooks/useCart';
+import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
-import { Address, CreateAddressPayload, Payment } from '@/lib/types';
-import { toNumber } from '@/lib/utils';
+import { Address, CreateAddressPayload, Payment, ShippingOption } from '@/lib/types';
+import { toNumber, formatPrice } from '@/lib/utils';
 import { PriceFormatter } from '@/components/ui/PriceFormatter';
 import { LoadingState } from '@/components/ui/LoadingState';
 import { Button } from '@/components/ui/Button';
@@ -84,6 +84,7 @@ function Field({
 export default function CheckoutPage() {
   const { user, isAuthenticated, loading: authLoading } = useAuth();
   const { cart, loading: cartLoading, initialized, refresh } = useCart();
+  const router = useRouter();
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState('new');
   const [address, setAddress] = useState<AddressForm>(initialAddress);
@@ -92,9 +93,10 @@ export default function CheckoutPage() {
   const [loadingAddresses, setLoadingAddresses] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<{ number: string; payment?: Payment; paymentError?: string } | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([]);
+  const [selectedShippingId, setSelectedShippingId] = useState<string | null>(null);
+  const [shippingError, setShippingError] = useState<string | null>(null);
+  const [shippingSource, setShippingSource] = useState<'superfrete' | 'fallback' | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -119,48 +121,71 @@ export default function CheckoutPage() {
     };
   }, [isAuthenticated]);
 
-  useEffect(() => {
-    if (!success?.payment?.expiresAt) return;
-
-    const expiresAt = new Date(success.payment.expiresAt).getTime();
-    const now = Date.now();
-    const initialTimeLeft = Math.max(0, Math.floor((expiresAt - now) / 1000));
-
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev === null || prev <= 1) {
-          clearInterval(timer);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    const timeout = setTimeout(() => {
-      setTimeLeft(initialTimeLeft);
-    }, 0);
-
-    return () => {
-      clearInterval(timer);
-      clearTimeout(timeout);
-    };
-  }, [success?.payment?.expiresAt]);
-
-  const handleCopyPixKey = async () => {
-    if (success?.payment?.pixCopyPaste) {
-      try {
-        await navigator.clipboard.writeText(success.payment.pixCopyPaste);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      } catch (error) {
-        console.error('Failed to copy:', error);
-      }
-    }
-  };
-
   const items = cart?.items ?? [];
   const subtotal = toNumber(cart?.totalAmount) ?? 0;
-  const shipping = 0;
+
+  const selectedSavedAddress = addresses.find((item) => item.id === selectedAddressId) ?? null;
+  const effectiveZipcode = (
+    selectedSavedAddress?.zipcode ?? (selectedAddressId === 'new' ? address.zipcode : '')
+  )
+    .replace(/\D/g, '')
+    .slice(0, 8);
+  const cartSignature = items.map((item) => `${item.productId}:${item.quantity}`).join(',');
+  const canQuoteShipping = isAuthenticated && effectiveZipcode.length === 8 && items.length > 0;
+  const shippingQuoteKey = canQuoteShipping ? `${effectiveZipcode}|${cartSignature}` : null;
+  const [quotedShippingKey, setQuotedShippingKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!canQuoteShipping || !shippingQuoteKey) {
+      return;
+    }
+
+    const key = shippingQuoteKey;
+    let active = true;
+
+    const payload = items.map((item) => ({ productId: item.productId, quantity: item.quantity }));
+    void api.calculateShipping(effectiveZipcode, payload).then((result) => {
+      if (!active) return;
+      if (result.ok) {
+        setShippingOptions(result.data.options);
+        setShippingSource(result.data.source);
+        const cheapest = [...result.data.options].sort((a, b) => a.price - b.price)[0];
+        setSelectedShippingId(cheapest ? cheapest.id : null);
+        setShippingError(
+          result.data.options.length === 0 ? 'Nenhuma opção de frete disponível para este CEP.' : null,
+        );
+      } else {
+        setShippingOptions([]);
+        setSelectedShippingId(null);
+        setShippingSource(null);
+        setShippingError('Não foi possível calcular o frete. Verifique o CEP e tente novamente.');
+      }
+      setQuotedShippingKey(key);
+    });
+
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canQuoteShipping, shippingQuoteKey]);
+
+  const isQuoteCurrent = canQuoteShipping && quotedShippingKey === shippingQuoteKey;
+  const visibleShippingOptions = isQuoteCurrent ? shippingOptions : [];
+  const visibleSelectedShippingId = isQuoteCurrent ? selectedShippingId : null;
+  const visibleShippingLoading = canQuoteShipping && !isQuoteCurrent;
+  const visibleShippingError = isQuoteCurrent
+    ? shippingError
+    : !canQuoteShipping &&
+        isAuthenticated &&
+        effectiveZipcode.length === 8 &&
+        items.length === 0
+      ? 'Adicione produtos ao carrinho para calcular o frete.'
+      : null;
+  const visibleShippingSource = isQuoteCurrent ? shippingSource : null;
+
+  const selectedShipping =
+    visibleShippingOptions.find((option) => option.id === visibleSelectedShippingId) ?? null;
+  const shipping = selectedShipping ? selectedShipping.price : 0;
   const total = subtotal + shipping;
 
   const updateAddress = (name: keyof AddressForm, value: string) => {
@@ -222,7 +247,22 @@ export default function CheckoutPage() {
       return;
     }
 
+    if (effectiveZipcode.length !== 8) {
+      setError('Informe um CEP com 8 dígitos para calcular o frete.');
+      return;
+    }
+
+    if (!selectedShipping) {
+      setError(
+        visibleShippingLoading
+          ? 'Aguarde o cálculo do frete antes de confirmar o pedido.'
+          : 'Selecione uma opção de frete para concluir o pedido.',
+      );
+      return;
+    }
+
     setSubmitting(true);
+    const lockedShipping = { price: selectedShipping.price, optionName: selectedShipping.name };
     try {
       let addressId = selectedAddressId;
       if (selectedAddressId === 'new') {
@@ -246,22 +286,23 @@ export default function CheckoutPage() {
         addressId = addressResult.data.id;
       }
 
-      const orderResult = await api.createOrder(addressId, notes.trim() || undefined);
+      const orderResult = await api.createOrder(
+        addressId,
+        notes.trim() || undefined,
+        undefined,
+        lockedShipping,
+      );
       if (!orderResult.ok) {
         setError(statusMessage(orderResult.status));
         return;
       }
 
-      const paymentResult = await api.createPayment(orderResult.data.id, payment);
+      // Fire and forget: create the payment record so the success page can
+      // read it immediately. Errors here are non-fatal — the success page will
+      // retry via createPayment (idempotent) on mount.
+      void api.createPayment(orderResult.data.id, payment);
       await refresh();
-      if (paymentResult.ok) {
-        setSuccess({ number: orderResult.data.number, payment: paymentResult.data });
-      } else {
-        setSuccess({
-          number: orderResult.data.number,
-          paymentError: 'Pedido criado, mas não foi possível iniciar o pagamento PIX. Consulte o suporte.',
-        });
-      }
+      router.push(`/checkout/sucesso/${orderResult.data.id}`);
     } finally {
       setSubmitting(false);
     }
@@ -280,62 +321,6 @@ export default function CheckoutPage() {
           <Link href="/login" className="mt-6 inline-flex rounded-lg bg-accent px-6 py-3 font-semibold text-ink hover:bg-accent-dark">
             Entrar na conta
           </Link>
-        </section>
-      </main>
-    );
-  }
-
-  if (success) {
-    return (
-      <main className="container-custom py-16">
-        <section className="mx-auto max-w-2xl rounded-2xl border border-success/30 bg-success/10 p-8 text-center">
-          <p className="text-sm font-semibold uppercase tracking-[0.16em] text-success">Pedido confirmado</p>
-          <h1 className="mt-3 text-3xl font-bold text-foreground">Obrigado pela sua compra</h1>
-          <p className="mt-3 text-muted-foreground">Pedido {success.number} criado com sucesso.</p>
-          {success.paymentError && <p role="alert" className="mt-4 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-foreground">{success.paymentError}</p>}
-          {success.payment?.pixCopyPaste && (
-            <div className="mt-6 space-y-4">
-              {success.payment.pixQrCode && (
-                <div className="flex justify-center">
-                  <Image
-                    src={success.payment.pixQrCode}
-                    alt="QR Code PIX"
-                    width={192}
-                    height={192}
-                    className="h-48 w-48 rounded-lg border border-border bg-white"
-                  />
-                </div>
-              )}
-              <div className="rounded-xl border border-border bg-background p-4 text-left">
-                <p className="text-sm font-semibold text-foreground">PIX copia e cola</p>
-                <p className="mt-2 break-all text-xs text-muted-foreground">{success.payment.pixCopyPaste}</p>
-                <button
-                  type="button"
-                  onClick={handleCopyPixKey}
-                  className="mt-3 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-ink transition hover:bg-accent-dark"
-                >
-                  {copied ? 'Chave Copiada!' : 'Copiar Chave PIX'}
-                </button>
-              </div>
-              {timeLeft !== null && (
-                <div className="rounded-lg border border-warning/30 bg-warning/10 px-4 py-3">
-                  <p className="text-sm font-semibold text-warning">
-                    {timeLeft > 0
-                      ? `Este QR Code expira em ${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}`
-                      : 'Este QR Code expirou'}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-          <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:justify-center">
-            <Link href="/pedidos" className="inline-flex rounded-lg bg-accent px-6 py-3 font-semibold text-ink hover:bg-accent-dark">
-              Ver meus pedidos
-            </Link>
-            <Link href="/loja" className="inline-flex rounded-lg border border-border bg-background px-6 py-3 font-semibold text-foreground hover:bg-muted/50">
-              Voltar para a loja
-            </Link>
-          </div>
         </section>
       </main>
     );
@@ -421,6 +406,68 @@ export default function CheckoutPage() {
           </section>
 
           <section className="rounded-2xl border border-border bg-background p-5 md:p-7">
+            <div className="mb-1 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-bold text-foreground">Opções de frete</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {effectiveZipcode.length === 8
+                    ? `Calculado para o CEP ${effectiveZipcode}.`
+                    : 'Selecione ou preencha um endereço com CEP para calcular.'}
+                </p>
+              </div>
+              {visibleShippingSource && (
+                <span className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground">
+                  {visibleShippingSource === 'superfrete' ? 'Cotação SuperFrete' : 'Frete fixo por região'}
+                </span>
+              )}
+            </div>
+
+            {visibleShippingLoading && <p className="mt-4 text-sm text-muted-foreground">Calculando frete…</p>}
+
+            {!visibleShippingLoading && visibleShippingError && visibleShippingOptions.length === 0 && (
+              <p role="alert" className="mt-4 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-foreground">
+                {visibleShippingError}
+              </p>
+            )}
+
+            {!visibleShippingLoading && visibleShippingOptions.length > 0 && (
+              <div className="mt-5 grid gap-3">
+                {visibleShippingOptions.map((option) => (
+                  <label
+                    key={option.id}
+                    className={`flex cursor-pointer items-center gap-3 rounded-xl border p-4 transition hover:border-accent/60 ${visibleSelectedShippingId === option.id ? 'border-accent bg-accent/5' : 'border-input'}`}
+                  >
+                    <input
+                      type="radio"
+                      name="shipping"
+                      value={option.id}
+                      checked={visibleSelectedShippingId === option.id}
+                      onChange={() => setSelectedShippingId(option.id)}
+                      className="h-4 w-4 accent-[#c9a227]"
+                    />
+                    <span className="flex-1">
+                      <span className="block font-semibold text-foreground">
+                        {option.name}
+                        {option.isLocal && <span className="ml-2 rounded-full bg-accent/15 px-2 py-0.5 text-xs text-accent">Local</span>}
+                      </span>
+                      <span className="block text-sm text-muted-foreground">
+                        {option.deliveryDays !== null && option.deliveryDays !== undefined
+                          ? `Chega em até ${option.deliveryDays} dia${option.deliveryDays === 1 ? '' : 's'} útil${option.deliveryDays === 1 ? '' : 'eis'}`
+                          : 'Prazo a combinar'}
+                      </span>
+                    </span>
+                    <span className="font-semibold text-foreground">{formatPrice(option.price)}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+
+            {!visibleShippingLoading && visibleShippingOptions.length > 0 && visibleShippingError && (
+              <p className="mt-3 text-xs text-muted-foreground">{visibleShippingError}</p>
+            )}
+          </section>
+
+          <section className="rounded-2xl border border-border bg-background p-5 md:p-7">
             <h2 className="text-xl font-bold text-foreground">Forma de pagamento</h2>
             <div className="mt-5 grid gap-3">
               {paymentOptions.map((option) => (
@@ -442,8 +489,8 @@ export default function CheckoutPage() {
           <ul className="mt-5 space-y-4 border-b border-border pb-5">
             {items.map((item) => <li key={item.id ?? item.productId} className="flex justify-between gap-4 text-sm"><span className="text-muted-foreground">{item.quantity}x {item.name ?? 'Produto'}</span><PriceFormatter price={(toNumber(item.price) ?? 0) * item.quantity} /></li>)}
           </ul>
-          <dl className="mt-5 space-y-2 text-sm"><div className="flex justify-between"><dt className="text-muted-foreground">Subtotal</dt><dd><PriceFormatter price={subtotal} /></dd></div><div className="flex justify-between"><dt className="text-muted-foreground">Frete</dt><dd><PriceFormatter price={shipping} /></dd></div><div className="mt-4 flex justify-between border-t border-border pt-4 text-lg font-bold"><dt>Total</dt><dd className="text-accent"><PriceFormatter price={total} /></dd></div></dl>
-          <Button type="submit" size="lg" className="mt-7 w-full" disabled={submitting || payment !== 'PIX'}>{submitting ? 'Processando pedido...' : 'Confirmar pedido'}</Button>
+          <dl className="mt-5 space-y-2 text-sm"><div className="flex justify-between"><dt className="text-muted-foreground">Subtotal</dt><dd><PriceFormatter price={subtotal} /></dd></div><div className="flex justify-between"><dt className="text-muted-foreground">Frete{selectedShipping ? ` (${selectedShipping.name})` : ''}</dt><dd>{visibleShippingLoading ? <span className="text-muted-foreground">Calculando…</span> : <PriceFormatter price={shipping} />}</dd></div><div className="mt-4 flex justify-between border-t border-border pt-4 text-lg font-bold"><dt>Total</dt><dd className="text-accent"><PriceFormatter price={total} /></dd></div></dl>
+          <Button type="submit" size="lg" className="mt-7 w-full" disabled={submitting || payment !== 'PIX' || visibleShippingLoading || !selectedShipping}>{submitting ? 'Processando pedido...' : visibleShippingLoading ? 'Calculando frete...' : 'Confirmar pedido'}</Button>
           <p className="mt-3 text-center text-xs text-muted-foreground">O estoque é validado no momento da confirmação.</p>
         </aside>
       </form>

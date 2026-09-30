@@ -15,11 +15,14 @@ import { PaymentsModule } from './modules/payments/payments.module';
 import { AddressesModule } from './modules/addresses/addresses.module';
 import { DeliveryModule } from './modules/delivery/delivery.module';
 import { ImageSearchModule } from './modules/image-search/image-search.module';
+import { ShippingModule } from './modules/shipping/shipping.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 
 @Module({
   imports: [
     AppConfigModule,
     PrismaModule,
+    NotificationsModule,
     AuthModule,
     UsersModule,
     CategoriesModule,
@@ -34,6 +37,7 @@ import { ImageSearchModule } from './modules/image-search/image-search.module';
     AddressesModule,
     DeliveryModule,
     ImageSearchModule,
+    ShippingModule,
   ],
 })
 export class AppModule {}

@@ -18,13 +18,14 @@ import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { RecaptchaGuard } from '../../common/guards/recaptcha.guard';
 
 @Controller('orders')
 export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
 
   @Post()
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(RecaptchaGuard, JwtAuthGuard, RolesGuard)
   @Roles(UserRole.CUSTOMER)
   create(
     @Req() req: any,

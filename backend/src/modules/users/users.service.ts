@@ -51,7 +51,7 @@ export class UsersService {
 
   async create(data: CreateUserDto & { role?: UserRole }) {
     const { name, email, password, phone, cpf, role } = data;
-    const passwordHash = this.hashPassword(password);
+    const passwordHash = password ? this.hashPassword(password) : '';
     const createData: any = {
       name,
       email,
@@ -211,6 +211,129 @@ export class UsersService {
       }
       throw err;
     }
+  }
+
+  async findByEmail(email: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        cpf: true,
+        phone: true,
+        role: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    return user;
+  }
+
+  /**
+   * Busca pelo identificador estável da conta Google (claim `sub`).
+   *
+   * É a PRIMEIRA consulta do login social: o e-mail pode mudar na conta
+   * Google, o `sub` não.
+   */
+  async findByGoogleId(googleId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { googleId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        cpf: true,
+        phone: true,
+        role: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    return user;
+  }
+
+  /**
+   * Busca por e-mail ignorando maiúsculas/minúsculas.
+   *
+   * O Google devolve o e-mail normalizado; sem isto, uma conta cadastrada como
+   * "Nome@Email.com" geraria uma SEGUNDA conta para o mesmo endereço.
+   */
+  async findByEmailInsensitive(email: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        cpf: true,
+        phone: true,
+        role: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    return user;
+  }
+
+  /**
+   * Cria a conta de quem entrou apenas com o Google.
+   *
+   * Diferenças em relação ao cadastro normal:
+   *  - `passwordHash` fica vazio (não existe senha até o usuário definir uma);
+   *  - nasce `ACTIVE` e com `role: CUSTOMER`, porque o Google já confirmou o
+   *    e-mail — deixar a conta PENDING só travaria a compra.
+   */
+  async createGoogleUser(data: { email: string; name: string; googleId: string }) {
+    try {
+      const user = await this.prisma.user.create({
+        data: {
+          name: data.name,
+          email: data.email,
+          googleId: data.googleId,
+          passwordHash: '',
+          role: UserRole.CUSTOMER,
+          status: UserStatus.ACTIVE,
+          emailVerified: true,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          cpf: true,
+          phone: true,
+          role: true,
+          status: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+      return user;
+    } catch (err: any) {
+      // Prisma unique constraint error code
+      if (err.code === 'P2002') {
+        throw new ConflictException('Email already in use');
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Vincula o `googleId` a uma conta que já existia com o mesmo e-mail.
+   *
+   * O filtro `googleId: null` garante que um vínculo existente NUNCA seja
+   * sobrescrito. O retorno `false` avisa o AuthService de que a conta já
+   * pertence a outra conta Google.
+   */
+  async linkGoogleAccount(id: string, googleId: string): Promise<boolean> {
+    const result = await this.prisma.user.updateMany({
+      where: { id, googleId: null },
+      data: { googleId },
+    });
+    return result.count === 1;
   }
 
   async validateCredentials(email: string, password: string) {

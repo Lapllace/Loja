@@ -31,7 +31,9 @@ export function ProductActions({ productId, stock }: ProductActionsProps) {
 
   const inCart = getItemQuantity(productId);
   const available = Math.max(0, stock - inCart);
-  const canAdd = isAuthenticated && inStock && available > 0 && !updating;
+  // Visitantes também podem adicionar: o item vai para o carrinho local
+  // (localStorage) e só o checkout exige conta.
+  const canAdd = inStock && available > 0 && !updating;
 
   const handleAddToCart = async () => {
     setFeedback(null);
@@ -105,30 +107,31 @@ export function ProductActions({ productId, stock }: ProductActionsProps) {
         </div>
       )}
 
-      {isAuthenticated ? (
-        <Button
-          variant="primary"
-          size="lg"
-          className="w-full"
-          onClick={() => void handleAddToCart()}
-          disabled={!canAdd}
-          title={
-            !inStock
-              ? 'Produto esgotado'
-              : available <= 0
-                ? 'Você já tem o estoque disponível no carrinho'
-                : undefined
-          }
-        >
-          {!inStock ? 'Produto esgotado' : updating ? 'Adicionando...' : 'Adicionar ao carrinho'}
-        </Button>
-      ) : (
-        <Link
-          href="/login"
-          className="w-full inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition-colors bg-accent text-ink hover:bg-accent-dark px-7 py-3 text-lg"
-        >
-          Entre para adicionar ao carrinho
-        </Link>
+      <Button
+        variant="primary"
+        size="lg"
+        className="w-full"
+        onClick={() => void handleAddToCart()}
+        disabled={!canAdd}
+        title={
+          !inStock
+            ? 'Produto esgotado'
+            : available <= 0
+              ? 'Você já tem o estoque disponível no carrinho'
+              : undefined
+        }
+      >
+        {!inStock ? 'Produto esgotado' : updating ? 'Adicionando...' : 'Adicionar ao carrinho'}
+      </Button>
+
+      {!isAuthenticated && (
+        <p className="text-xs text-muted-foreground">
+          Você está comprando como visitante.{' '}
+          <Link href="/login" className="font-semibold text-accent hover:underline">
+            Entre na conta
+          </Link>{' '}
+          para finalizar a compra.
+        </p>
       )}
 
       {inCart > 0 && (

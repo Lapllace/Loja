@@ -5,6 +5,8 @@ import { SESSION_STORAGE_KEY } from './constants';
 /** Exportado para eventuais consumidores; o valor canônico vive em constants.ts. */
 export const SESSION_KEY = SESSION_STORAGE_KEY;
 
+type PostLoginCallback = () => void | Promise<void>;
+
 /**
  * Lê o accessToken direto do localStorage ('auth_session').
  * Útil como fallback quando o singleton ainda não hidratou a sessão em memória
@@ -39,6 +41,7 @@ export class AuthManager {
   private session: Session | null = null;
   private storage: 'local' | 'session' = 'local';
   private listeners: Set<(session: Session | null) => void> = new Set();
+  private postLoginCallbacks: Set<PostLoginCallback> = new Set();
 
   constructor() {
     this.loadSession();
@@ -111,6 +114,16 @@ export class AuthManager {
     this.listeners.forEach(listener => listener(this.session));
   }
 
+  private async executePostLoginCallbacks(): Promise<void> {
+    for (const callback of this.postLoginCallbacks) {
+      try {
+        await callback();
+      } catch (error) {
+        console.error('Post-login callback error:', error);
+      }
+    }
+  }
+
   public getSession(): Session | null {
     return this.session;
   }
@@ -141,6 +154,11 @@ export class AuthManager {
     return this.session === null && readStoredToken() !== null;
   }
 
+  public onPostLogin(callback: PostLoginCallback): () => void {
+    this.postLoginCallbacks.add(callback);
+    return () => this.postLoginCallbacks.delete(callback);
+  }
+
   public async login(
     email: string,
     password: string,
@@ -157,6 +175,7 @@ export class AuthManager {
         this.storage = rememberMe ? 'local' : 'session';
         this.saveSession();
         this.notifyListeners();
+        await this.executePostLoginCallbacks();
         return { success: true };
       }
       
@@ -179,6 +198,7 @@ export class AuthManager {
         this.storage = 'local';
         this.saveSession();
         this.notifyListeners();
+        await this.executePostLoginCallbacks();
         return { success: true };
       }
       
@@ -186,6 +206,33 @@ export class AuthManager {
     } catch (error) {
       console.error('Register failed:', error);
       return { success: false, error: 'Erro ao criar conta' };
+    }
+  }
+
+  public async googleLogin(idToken: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const result = await api.googleLogin(idToken);
+
+      if (result.ok) {
+        this.session = {
+          user: result.data.user,
+          token: result.data.accessToken,
+        };
+        this.storage = 'local';
+        this.saveSession();
+        this.notifyListeners();
+        await this.executePostLoginCallbacks();
+        return { success: true };
+      }
+
+      // Mensagem do backend quando disponível (ex.: "Conta bloqueada").
+      return {
+        success: false,
+        error: result.message || 'Erro ao fazer login com Google',
+      };
+    } catch (error) {
+      console.error('Google login failed:', error);
+      return { success: false, error: 'Erro ao fazer login com Google' };
     }
   }
 

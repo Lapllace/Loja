@@ -57,7 +57,9 @@ export default function CartPage() {
     void refresh();
   };
 
-  if (authLoading || (loading && !initialized)) {
+  // `!initialized` cobre a primeira hidratação (GET /cart ou carrinho de
+  // visitante): sem isso o visitante veria "carrinho vazio" antes dos itens.
+  if (authLoading || !initialized) {
     return <LoadingState message="Carregando seu carrinho..." className="min-h-[400px]" />;
   }
 
@@ -102,7 +104,7 @@ export default function CartPage() {
             onUpdate={handleUpdate}
             onRemove={handleRemove}
             isAuthenticated={isAuthenticated}
-            onLoginPrompt={handleRetry}
+            onRetry={handleRetry}
           />
         </div>
 

@@ -93,6 +93,11 @@ export function useAuth() {
     [],
   );
 
+  const googleLogin = useCallback(async (idToken: string) => {
+    const result = await authManager.googleLogin(idToken);
+    return result;
+  }, []);
+
   const logout = useCallback(() => {
     authManager.logout();
   }, []);
@@ -115,6 +120,7 @@ export function useAuth() {
     loading: !hydrated,
     login,
     register,
+    googleLogin,
     logout,
     refresh,
   };

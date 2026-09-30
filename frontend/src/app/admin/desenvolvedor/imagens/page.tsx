@@ -39,7 +39,7 @@ export default function DeveloperImagesPage() {
   }
 
   if (!isAuthenticated || !isOwner) {
-    router.replace('/admin');
+    router.replace('/admin/dashboard');
     return null;
   }
 

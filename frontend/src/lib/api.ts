@@ -23,6 +23,7 @@ import {
   CreateAddressPayload,
   Order,
   Payment,
+  ShippingQuote,
   ProductFormPayload,
   UploadedImage,
   ImageSearchQuery,
@@ -36,6 +37,7 @@ import {
   PendingDeliveryAuthorization,
 } from './types';
 import { SESSION_STORAGE_KEY } from './constants';
+import { getRecaptchaToken, isRecaptchaEnabled } from './recaptcha';
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
 
@@ -103,6 +105,17 @@ export type ApiResult<T> =
   | { ok: true; data: T }
   | { ok: false; status: number };
 
+/**
+ * Resultado de requisição de autenticação que PRESERVA a mensagem do backend.
+ *
+ * `ApiResult` descarta o corpo da resposta de erro; nos fluxos de login isso
+ * esconde mensagens úteis como "Conta bloqueada" (401) atrás de um genérico
+ * "Erro ao fazer login".
+ */
+export type AuthRequestResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; status: number; message?: string };
+
 export class ApiHttpError extends Error {
   constructor(public readonly status: number) {
     super(`API request failed with status ${status}`);
@@ -117,7 +130,47 @@ export function resolveImageUrl(url: string | null | undefined): string | null {
   return `${BACKEND_ORIGIN}${url.startsWith('/') ? '' : '/'}${url}`;
 }
 
+/**
+ * Lê a mensagem de erro do NestJS (`{ statusCode, message, error }`).
+ * `message` pode vir como string ou como lista (o ValidationPipe devolve
+ * `string[]`), então tratamos os dois formatos.
+ */
+async function readApiErrorMessage(response: Response): Promise<string | undefined> {
+  try {
+    const payload: unknown = await response.json();
+    if (!payload || typeof payload !== 'object') return undefined;
+    const message = (payload as { message?: unknown }).message;
+    if (typeof message === 'string' && message.trim() !== '') return message;
+    if (Array.isArray(message) && typeof message[0] === 'string') return message[0];
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 class ApiClient {
+  /**
+   * Adiciona a header `x-recaptcha-token` (reCAPTCHA v3) nas requisições de
+   * escrita feitas pelo browser. Server Components (SSR) não emitem token —
+   * e o backend tolera requisições sem a header quando o reCAPTCHA não está
+   * configurado. Se a SDK falhar (ex.: adblock), seguimos sem a header em vez
+   * de bloquear o usuário.
+   */
+  private async withRecaptchaHeader(
+    method: string,
+    headers: Record<string, string>,
+  ): Promise<Record<string, string>> {
+    const isMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
+    if (typeof window === 'undefined' || !isMutation || !isRecaptchaEnabled()) {
+      return headers;
+    }
+
+    const token = await getRecaptchaToken(
+      method === 'POST' ? 'submit' : 'update',
+    );
+    return token ? { ...headers, 'x-recaptcha-token': token } : headers;
+  }
+
   private async request<T>(
     endpoint: string,
     opts: RequestOptions = {},
@@ -133,7 +186,7 @@ class ApiClient {
       // (Authorization, etc.) devem ser preservados. Descartar `opts.headers`
       // inteiro aqui fazia o POST/PATCH multipart de produtos ir sem o token
       // e o backend responder 401 "Unauthorized".
-      const headers: Record<string, string> = {
+      let headers: Record<string, string> = {
         Accept: 'application/json',
         ...opts.headers,
       };
@@ -142,6 +195,8 @@ class ApiClient {
           if (key.toLowerCase() === 'content-type') delete headers[key];
         }
       }
+
+      headers = await this.withRecaptchaHeader(opts.method ?? 'GET', headers);
 
       const response = await fetch(url, {
         method: opts.method ?? 'GET',
@@ -320,6 +375,48 @@ class ApiClient {
     );
   }
 
+  /**
+   * POST de autenticação que devolve a mensagem de erro do NestJS.
+   *
+   * Usa a URL completa do backend (`resolveApiUrl()` → `NEXT_PUBLIC_API_URL`),
+   * exatamente como as demais chamadas: o frontend NUNCA fala com uma rota
+   * própria do Next.js para autenticar.
+   */
+  private async postAuth<T>(
+    endpoint: string,
+    body: unknown,
+  ): Promise<AuthRequestResult<T>> {
+    const timeout = createTimeoutSignal(DEFAULT_TIMEOUT);
+
+    try {
+      const headers = await this.withRecaptchaHeader('POST', {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      });
+
+      const response = await fetch(`${resolveApiUrl()}${endpoint}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal: timeout.signal,
+      });
+
+      if (!response.ok) {
+        return {
+          ok: false,
+          status: response.status,
+          message: await readApiErrorMessage(response),
+        };
+      }
+
+      return { ok: true, data: (await response.json()) as T };
+    } catch {
+      return { ok: false, status: 0, message: 'Não foi possível contatar a API.' };
+    } finally {
+      timeout.clear();
+    }
+  }
+
   // ---------------- Authentication ----------------
 
   async login(
@@ -346,6 +443,15 @@ class ApiClient {
       body: JSON.stringify(data),
     });
     return result.ok ? result.data : null;
+  }
+
+  /**
+   * POST /auth/google — troca o `idToken` do Google Identity Services pelo JWT
+   * da loja. A mensagem de erro do backend é preservada (ex.: "Conta bloqueada",
+   * "Google authentication is not configured").
+   */
+  async googleLogin(idToken: string): Promise<AuthRequestResult<AuthResponse>> {
+    return this.postAuth<AuthResponse>('/auth/google', { idToken });
   }
 
     async getMe(token: string, opts: RequestOptions = {}): Promise<User | null> {
@@ -513,10 +619,31 @@ class ApiClient {
     });
   }
 
+  /**
+   * Cotação de frete. Usa a URL completa do backend (NEXT_PUBLIC_API_URL).
+   * O backend responde sempre com pelo menos uma opção (fallback fixo por
+   * região), salvo falha de validação do payload.
+   */
+  async calculateShipping(
+    zipcode: string,
+    items: Array<{ productId: string; quantity: number }>,
+  ): Promise<ApiResult<ShippingQuote>> {
+    if (zipcode.length !== 8 || items.length === 0) {
+      return { ok: false, status: 400 };
+    }
+
+    return this.request<ShippingQuote>('/shipping/calculate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ zipcode, items }),
+    });
+  }
+
   async createOrder(
     addressId: string,
     notes?: string,
     token?: string,
+    shipping?: { price: number; optionName: string },
   ): Promise<ApiResult<Order>> {
     const resolved = this.resolveToken(token);
     if (!resolved) return { ok: false, status: 401 };
@@ -527,7 +654,11 @@ class ApiClient {
         Authorization: `Bearer ${resolved}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ addressId, ...(notes ? { notes } : {}) }),
+      body: JSON.stringify({
+        addressId,
+        ...(notes ? { notes } : {}),
+        ...(shipping ? { shipping: shipping.price, shippingOptionName: shipping.optionName } : {}),
+      }),
     });
   }
 
