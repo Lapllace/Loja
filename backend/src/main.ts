@@ -40,7 +40,24 @@ async function bootstrap() {
   app.useStaticAssets(UPLOADS_DIR, { prefix: `${UPLOADS_URL_PREFIX}/` });
 
   app.setGlobalPrefix('api');
-  app.enableCors();
+
+  // CORS: allow CORS_ORIGIN (comma-separated) + always allow localhost variants.
+  const corsOriginEnv = process.env.CORS_ORIGIN;
+  const corsOrigins: (string | RegExp)[] = [
+    // Always allow localhost for development
+    /^http:\/\/localhost(:\d+)?$/,
+    /^http:\/\/127\.0\.0\.1(:\d+)?$/,
+  ];
+  if (corsOriginEnv) {
+    corsOriginEnv.split(',').map((o) => o.trim()).filter(Boolean).forEach((o) => {
+      corsOrigins.push(o);
+    });
+  }
+  app.enableCors({
+    origin: corsOrigins,
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    credentials: false,
+  });
   app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
   app.enableShutdownHooks();
 

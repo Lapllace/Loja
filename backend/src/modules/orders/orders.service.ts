@@ -17,6 +17,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { MetaWhatsappService } from '../notifications/meta-whatsapp.service';
+import { ShippingService } from '../shipping/shipping.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 
@@ -48,6 +49,7 @@ export class OrdersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly whatsapp: MetaWhatsappService,
+    private readonly shippingService: ShippingService,
   ) {}
 
   private serializeItem(item: OrderItem, includeCostPrice: boolean) {
@@ -301,6 +303,42 @@ export class OrdersService {
       throw new NotFoundException('Address not found');
     }
 
+    // Server-side shipping validation: recalculate shipping using actual cart items.
+    // This prevents clients from sending arbitrary shipping prices.
+    let serverShipping = new Prisma.Decimal(0);
+
+    if (data.shippingOptionName) {
+      // Pre-fetch cart items to calculate shipping before transaction
+      const cart = await this.prisma.cart.findUnique({
+        where: { userId },
+        include: { items: true },
+      });
+
+      if (cart && cart.items.length > 0) {
+        const shippingItems = cart.items.map((item) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+        }));
+
+        const quote = await this.shippingService.calculate({
+          zipcode: address.zipcode,
+          items: shippingItems,
+        });
+
+        const matchedOption = quote.options.find(
+          (opt) => opt.name === data.shippingOptionName,
+        );
+
+        if (!matchedOption) {
+          throw new BadRequestException(
+            `Shipping option '${data.shippingOptionName}' is not available for this address`,
+          );
+        }
+
+        serverShipping = new Prisma.Decimal(matchedOption.price.toFixed(2));
+      }
+    }
+
     return this.prisma.$transaction(async (tx) => {
       const cart = await tx.cart.findUnique({
         where: { userId },
@@ -315,8 +353,7 @@ export class OrdersService {
         tx,
         cart.items,
       );
-      const shippingValue = data.shipping ?? 0;
-      const shipping = new Prisma.Decimal(shippingValue.toFixed(2));
+      const shipping = serverShipping;
       const discount = new Prisma.Decimal(0);
       const total = subtotal.sub(discount).add(shipping);
 
@@ -406,30 +443,26 @@ export class OrdersService {
       throw new NotFoundException('Order not found');
     }
 
-    const allowed = new Set<OrderStatus>([
-      OrderStatus.PENDING,
-      OrderStatus.PAID,
-      OrderStatus.PROCESSING,
-      OrderStatus.SHIPPED,
-      OrderStatus.DELIVERED,
-    ]);
-
-    if (!allowed.has(data.status)) {
-      const blocked = new Set<OrderStatus>([
-        OrderStatus.CANCELLED,
-        OrderStatus.REFUNDED,
-      ]);
-      if (blocked.has(data.status)) {
-        throw new BadRequestException(
-          'Order status CANCELLED or REFUNDED is not available yet.',
-        );
-      }
-      throw new BadRequestException('Invalid order status');
-    }
-
     if (user.role !== UserRole.ADMIN && user.role !== UserRole.OWNER) {
       throw new ForbiddenException(
         'Only ADMIN or OWNER can update order status',
+      );
+    }
+
+    const VALID_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]>> = {
+      [OrderStatus.PENDING]:    [OrderStatus.PAID, OrderStatus.CANCELLED],
+      [OrderStatus.PAID]:       [OrderStatus.PROCESSING, OrderStatus.REFUNDED],
+      [OrderStatus.PROCESSING]: [OrderStatus.SHIPPED, OrderStatus.CANCELLED],
+      [OrderStatus.SHIPPED]:    [OrderStatus.DELIVERED],
+      [OrderStatus.DELIVERED]:  [OrderStatus.REFUNDED],
+      [OrderStatus.CANCELLED]:  [],
+      [OrderStatus.REFUNDED]:   [],
+    };
+
+    const allowed = VALID_TRANSITIONS[order.status] ?? [];
+    if (!allowed.includes(data.status)) {
+      throw new BadRequestException(
+        `Cannot transition order from ${order.status} to ${data.status}`,
       );
     }
 

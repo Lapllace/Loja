@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { AppConfigModule } from './config/config.module';
 import { PrismaModule } from './database/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -8,8 +10,6 @@ import { BrandsModule } from './modules/brands/brands.module';
 import { ProductsModule } from './modules/products/products.module';
 import { CartsModule } from './modules/carts/carts.module';
 import { OrdersModule } from './modules/orders/orders.module';
-import { CouponsModule } from './modules/coupons/coupons.module';
-import { ReviewsModule } from './modules/reviews/reviews.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { AddressesModule } from './modules/addresses/addresses.module';
@@ -22,6 +22,8 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
   imports: [
     AppConfigModule,
     PrismaModule,
+    // Rate limiting: 100 requests per 60 seconds globally.
+    ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
     NotificationsModule,
     AuthModule,
     UsersModule,
@@ -30,14 +32,19 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     ProductsModule,
     CartsModule,
     OrdersModule,
-    CouponsModule,
-    ReviewsModule,
     UploadsModule,
     PaymentsModule,
     AddressesModule,
     DeliveryModule,
     ImageSearchModule,
     ShippingModule,
+  ],
+  providers: [
+    // Apply ThrottlerGuard globally as APP_GUARD.
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
 })
 export class AppModule {}

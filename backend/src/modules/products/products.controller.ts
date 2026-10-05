@@ -7,6 +7,7 @@ import {
   Param,
   Body,
   Query,
+  Req,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
@@ -173,6 +174,7 @@ export class ProductsController {
     FileFieldsInterceptor(PRODUCT_IMAGE_FIELDS, productImageMulterOptions),
   )
   async update(
+    @Req() req: any,
     @Param('id') id: string,
     @Body() body: Record<string, unknown>,
     @UploadedFiles()
@@ -188,6 +190,7 @@ export class ProductsController {
       id,
       dto,
       stored.map((s) => s.url),
+      req.user?.id,
     );
   }
 

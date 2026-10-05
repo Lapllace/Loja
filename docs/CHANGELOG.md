@@ -43,7 +43,7 @@ Decisões definitivas aprovadas:
 - Pedidos com origin (LOCAL/ONLINE) e channel (LOJA_FISICA/SITE/WHATSAPP/INSTAGRAM)
 - Status de pedidos padronizados em português
 - Promoções apenas via price/sale_price (sem cupons/campanhas)
-- Pagamento online via Asaas (PIX, cartão, boleto)
+- Pagamento online via PagBank (PIX, cartão, boleto)
 - Uploads locais em storage/ (sem S3)
 - Desenvolvimento local sem Docker; Docker apenas no deploy Umbrel
 - Eliminação de módulos: coupons, promotions, materials, finance
@@ -89,7 +89,7 @@ Decisões incorporadas ao schema (v2.1):
 
 0.4 — Painel operacional
 
-0.5 — Loja virtual + Asaas
+0.5 — Loja virtual + PagBank
 
 1.0 — Deploy Umbrel, produção
 

@@ -67,7 +67,7 @@ Cada produto possui três conceitos de estoque:
 Fluxo pagamento online:
 
 1. Pedido criado (AGUARDANDO_PAGAMENTO) → reserved_stock += quantidade
-2. Webhook Asaas confirma pagamento → stock -= quantidade, reserved_stock -= quantidade
+2. Webhook PagBank confirma pagamento → stock -= quantidade, reserved_stock -= quantidade
 3. Pagamento expira ou cancela → reserved_stock -= quantidade (stock inalterado)
 
 Regras (enforced no service layer):
@@ -262,8 +262,8 @@ Pedidos NÃO possuem deleted_at (nunca apagar).
 |--------------------|----------------|------------------------|
 | id                 | UUID           | PK                     |
 | order_id           | UUID           | FK → orders            |
-| asaas_payment_id   | String?        | Unique, ID Asaas       |
-| asaas_customer_id  | String?        | ID cliente Asaas       |
+| pagbank_payment_id | String?        | Unique, ID PagBank     |
+| pagbank_customer_id| String?        | ID cliente PagBank     |
 | method             | PaymentMethod  | PIX, CREDIT_CARD, BOLETO|
 | status             | PaymentStatus  |                        |
 | amount             | Decimal        |                        |

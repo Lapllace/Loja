@@ -7,7 +7,7 @@
 
 Versão: 2.0
 
-Base URL: /api/v1
+Base URL: /api
 
 Formato: REST, JSON
 
@@ -139,10 +139,10 @@ Body movimentação:
 
 ==========================================================
 
-# PAYMENTS (ASAAS)
+# PAYMENTS (PAGBANK)
 
-POST   /payments/checkout          — Criar cobrança Asaas (checkout site)
-POST   /payments/webhook           — Webhook Asaas (sem auth, validar token)
+POST   /payments/checkout          — Criar cobrança PagBank (checkout site)
+POST   /payments/webhook           — Webhook PagBank (sem auth, validar token)
 GET    /payments/:orderId          — Status do pagamento
 
 ==========================================================

@@ -306,15 +306,23 @@ export function CartProvider({ children }: { children: ReactNode }) {
     const guestItems = readGuestCart();
     if (guestItems.length === 0) return;
 
+    const failedItems: GuestCartItem[] = [];
     for (const item of guestItems) {
       try {
-        await api.addToCart(item.productId, item.quantity, token);
-      } catch (error) {
-        console.error('Failed to merge guest cart item:', error);
+        const result = await api.addToCart(item.productId, item.quantity, token);
+        if (!result.ok) {
+          failedItems.push(item);
+        }
+      } catch {
+        failedItems.push(item);
       }
     }
 
-    clearGuestCart();
+    if (failedItems.length === 0) {
+      clearGuestCart();
+    } else {
+      writeGuestCart(failedItems);
+    }
     guestProductCache.clear();
     await load({ force: true });
   }, [load]);

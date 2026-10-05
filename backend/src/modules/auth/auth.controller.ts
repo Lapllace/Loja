@@ -8,6 +8,7 @@ import {
   Request,
   ForbiddenException,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
@@ -15,6 +16,7 @@ import { RegisterDto } from './dto/register.dto';
 import { GoogleAuthDto } from './dto/google-auth.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RecaptchaGuard } from '../../common/guards/recaptcha.guard';
+import { RecaptchaAction } from '../../common/decorators/recaptcha-action.decorator';
 import { UserStatus } from '@prisma/client';
 
 @Controller('auth')
@@ -25,7 +27,9 @@ export class AuthController {
   ) {}
 
   @Post('login')
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
   @UseGuards(RecaptchaGuard)
+  @RecaptchaAction('login')
   async login(@Body() body: LoginDto) {
     const user = await this.usersService.validateCredentials(
       body.email,
@@ -42,13 +46,18 @@ export class AuthController {
   }
 
   @Post('register')
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
   @UseGuards(RecaptchaGuard)
+  @RecaptchaAction('register')
   async register(@Body() body: RegisterDto) {
     const createdUser = await this.usersService.create(body);
     return this.authService.login(createdUser);
   }
 
   @Post('google')
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
+  @UseGuards(RecaptchaGuard)
+  @RecaptchaAction('login')
   async googleAuth(@Body() body: GoogleAuthDto) {
     return this.authService.googleAuth(body.idToken);
   }

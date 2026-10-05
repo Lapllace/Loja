@@ -11,9 +11,6 @@ import {
 } from './types';
 import { sanitizePhone } from './phone.util';
 
-/** Endpoint base da Meta Graph API. Versão fixada para evitar breaking changes. */
-const GRAPH_API_BASE = 'https://graph.facebook.com/v18.0';
-
 /** Tempo máximo para a resposta da API antes de desistir. */
 const REQUEST_TIMEOUT_MS = 8_000;
 
@@ -39,6 +36,14 @@ export class MetaWhatsappService {
 
   private get accessToken(): string | undefined {
     return this.config.get<string>('META_WA_ACCESS_TOKEN');
+  }
+
+  private get graphApiVersion(): string {
+    return this.config.get<string>('META_WA_GRAPH_API_VERSION', 'v21.0');
+  }
+
+  private get graphApiBase(): string {
+    return `https://graph.facebook.com/${this.graphApiVersion}`;
   }
 
   /**
@@ -139,7 +144,7 @@ export class MetaWhatsappService {
   private async post(
     payload: MetaWaTextPayload | MetaWaTemplatePayload,
   ): Promise<SendResult> {
-    const url = `${GRAPH_API_BASE}/${this.phoneNumberId}/messages`;
+    const url = `${this.graphApiBase}/${this.phoneNumberId}/messages`;
 
     try {
       const response = await axios.post<MetaWaSuccessResponse>(url, payload, {

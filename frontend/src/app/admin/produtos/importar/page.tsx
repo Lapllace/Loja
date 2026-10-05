@@ -91,13 +91,21 @@ export default function ImportProductsPage() {
     const items: ImportItem[] = [];
 
     for (const line of lines) {
-      const dashIndex = line.indexOf('-');
-      if (dashIndex === -1) continue;
+      // Use lastIndexOf(' - ') to correctly handle product names that contain hyphens.
+      const sepIndex = line.lastIndexOf(' - ');
+      if (sepIndex === -1) {
+        // Lines without ' - ' separator are invalid — include them as invalid in results
+        items.push({ name: `INVALID: ${line.trim()}`, quantity: 0 });
+        continue;
+      }
 
-      const name = line.substring(0, dashIndex).trim();
-      const rest = line.substring(dashIndex + 1).trim();
+      const name = line.substring(0, sepIndex).trim();
+      const rest = line.substring(sepIndex + 3).trim(); // skip ' - ' (3 chars)
 
-      if (!name) continue;
+      if (!name) {
+        items.push({ name: `INVALID: ${line.trim()}`, quantity: 0 });
+        continue;
+      }
 
       // Verifica se há variantes (ex: "20 branca 10 preta 10 azul")
       const variantMatches = rest.match(/(\d+)\s+(\w+)/g);
@@ -115,6 +123,8 @@ export default function ImportProductsPage() {
         const quantity = parseInt(rest, 10);
         if (!isNaN(quantity)) {
           items.push({ name, quantity });
+        } else {
+          items.push({ name: `INVALID: ${line.trim()}`, quantity: 0 });
         }
       }
     }

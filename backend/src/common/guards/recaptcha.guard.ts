@@ -5,7 +5,9 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
+import { RECAPTCHA_ACTION_KEY } from '../decorators/recaptcha-action.decorator';
 
 /**
  * Guard reCAPTCHA v3 (Google Site Verify API).
@@ -28,7 +30,10 @@ export class RecaptchaGuard implements CanActivate {
   private static readonly MIN_SCORE = 0.5;
   private static readonly TIMEOUT_MS = 6_000;
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    private readonly config: ConfigService,
+    private readonly reflector: Reflector,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const secretKey = this.config.get<string>('RECAPTCHA_SECRET_KEY');
@@ -54,7 +59,12 @@ export class RecaptchaGuard implements CanActivate {
       return false;
     }
 
-    return this.verify(secretKey, token, request.ip);
+    const expectedAction = this.reflector.getAllAndOverride<string | undefined>(
+      RECAPTCHA_ACTION_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+
+    return this.verify(secretKey, token, request.ip, expectedAction);
   }
 
   private extractToken(request: Request): string | null {
@@ -74,6 +84,7 @@ export class RecaptchaGuard implements CanActivate {
     secretKey: string,
     token: string,
     remoteIp: string | undefined,
+    expectedAction?: string,
   ): Promise<boolean> {
     const params = new URLSearchParams({ secret: secretKey, response: token });
     if (remoteIp) params.append('remoteip', remoteIp);
@@ -100,6 +111,7 @@ export class RecaptchaGuard implements CanActivate {
       const result = (await response.json()) as {
         success?: boolean;
         score?: number;
+        action?: string;
         'error-codes'?: string[];
       };
 
@@ -114,6 +126,13 @@ export class RecaptchaGuard implements CanActivate {
       if (score < RecaptchaGuard.MIN_SCORE) {
         this.logger.warn(
           `reCAPTCHA score too low: ${score} < ${RecaptchaGuard.MIN_SCORE}`,
+        );
+        return false;
+      }
+
+      if (expectedAction && result.action !== expectedAction) {
+        this.logger.warn(
+          `reCAPTCHA action mismatch: expected '${expectedAction}', got '${result.action}'`,
         );
         return false;
       }

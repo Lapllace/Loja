@@ -64,10 +64,14 @@ export class AuthService {
         audience: clientId,
       });
       const payload = ticket.getPayload();
+      if (!payload?.email_verified) {
+        throw new UnauthorizedException('Google account email is not verified');
+      }
       googleId = payload?.sub;
       email = payload?.email?.trim().toLowerCase() || undefined;
       name = payload?.name?.trim() || undefined;
-    } catch {
+    } catch (err) {
+      if (err instanceof UnauthorizedException) throw err;
       throw new UnauthorizedException('Invalid Google token');
     }
 

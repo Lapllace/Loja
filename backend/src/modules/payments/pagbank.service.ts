@@ -50,23 +50,25 @@ export class PagBankService {
       );
     }
 
-    const expectedTotalCents = order.items.reduce((sum: number, item: any) => {
-      const quantity = Number(item.quantity ?? 1);
-      const unitValue = Number(item.price ?? item.unit_price ?? 0);
-      const unitAmountCents = Math.round(unitValue * 100);
-      return sum + unitAmountCents * quantity;
-    }, 0);
+    // Validate that order.total matches subtotal + shipping - discount (within 1 cent)
+    const orderSubtotal = Number(order.subtotal ?? 0);
+    const orderShipping = Number(order.shipping ?? 0);
+    const orderDiscount = Number(order.discount ?? 0);
+    const orderTotal = Number(order.total ?? 0);
 
-    const orderTotalCents = Math.round(Number(order.total ?? 0) * 100);
-    if (!Number.isFinite(expectedTotalCents) || expectedTotalCents <= 0) {
+    if (Math.abs(orderSubtotal + orderShipping - orderDiscount - orderTotal) > 0.01) {
+      throw new BadRequestException(
+        'Order total does not match subtotal + shipping - discount',
+      );
+    }
+
+    const orderTotalCents = Math.round(orderTotal * 100);
+    if (!Number.isFinite(orderTotalCents) || orderTotalCents <= 0) {
       throw new BadRequestException('Order total must be greater than zero');
     }
 
-    if (expectedTotalCents !== orderTotalCents) {
-      throw new BadRequestException(
-        'Order total does not match the calculated checkout total',
-      );
-    }
+    const shippingCents = Math.round(orderShipping * 100);
+    const discountCents = Math.round(orderDiscount * 100);
 
     const referenceId = `order-${order.number ?? order.id}`;
     const payload = {
@@ -90,11 +92,11 @@ export class PagBankService {
         this.getReturnUrl() ??
         `${this.config.get<string>('APP_URL', 'http://localhost:3000')}/checkout/return`,
       amount: {
-        value: expectedTotalCents,
+        value: orderTotalCents,
         currency: 'BRL',
         summary: {
-          shipping: 0,
-          discount: 0,
+          shipping: shippingCents,
+          discount: discountCents,
           additional: 0,
         },
       },

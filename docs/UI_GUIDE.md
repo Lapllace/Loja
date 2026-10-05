@@ -120,7 +120,7 @@ Checkout:
 - Dados do cliente
 - Endereço de entrega
 - Tipo de entrega (retirada / local)
-- Pagamento via Asaas
+- Pagamento via PagBank
 - Confirmação
 
 Meta: finalizar compra em menos de 2 minutos.

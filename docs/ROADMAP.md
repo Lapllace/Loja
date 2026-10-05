@@ -65,8 +65,8 @@ Prioridade: operação da loja física antes da loja virtual.
 FASE 4 — PEDIDOS E PAGAMENTOS
 
 [ ] Orders (fluxo completo, origin + channel)
-[ ] Payments (integração Asaas)
-[ ] Webhook Asaas
+[ ] Payments (integração PagBank)
+[ ] Webhook PagBank
 [ ] Baixa automática de estoque
 
 ==========================================================
@@ -78,7 +78,7 @@ FASE 5 — LOJA VIRTUAL
 [ ] Página do produto
 [ ] Carrinho (localStorage)
 [ ] Checkout
-[ ] Pagamento Asaas (PIX, cartão, boleto)
+[ ] Pagamento PagBank (PIX, cartão, boleto)
 [ ] Confirmação
 
 ==========================================================

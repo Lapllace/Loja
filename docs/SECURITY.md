@@ -103,11 +103,11 @@ Proteção SQL Injection via Prisma (parametrizado).
 
 ==========================================================
 
-# WEBHOOK ASAAS
+# WEBHOOK PAGBANK
 
 Endpoint /payments/webhook sem autenticação JWT.
 
-Validar token/assinatura do Asaas.
+Validar token/assinatura do PagBank.
 
 Registrar tentativas inválidas.
 

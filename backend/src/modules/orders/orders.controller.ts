@@ -19,6 +19,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RecaptchaGuard } from '../../common/guards/recaptcha.guard';
+import { RecaptchaAction } from '../../common/decorators/recaptcha-action.decorator';
 
 @Controller('orders')
 export class OrdersController {
@@ -26,6 +27,7 @@ export class OrdersController {
 
   @Post()
   @UseGuards(RecaptchaGuard, JwtAuthGuard, RolesGuard)
+  @RecaptchaAction('purchase')
   @Roles(UserRole.CUSTOMER)
   create(
     @Req() req: any,

@@ -260,7 +260,11 @@ class ApiClient {
 
     const qs = params.toString();
     const result = await this.request<Product[]>(`/products${qs ? `?${qs}` : ''}`, opts);
-    return result.ok ? result.data : [];
+    if (result.ok) return result.data;
+    if (!result.ok && result.status !== 404) {
+      console.warn(`[api] getProducts failed: HTTP ${result.status} — /products${qs ? `?${qs}` : ''}`);
+    }
+    return [];
   }
 
   async getProductBySlug(
@@ -287,7 +291,11 @@ class ApiClient {
 
   async getCategories(opts: RequestOptions = {}): Promise<Category[]> {
     const result = await this.request<Category[]>('/categories', opts);
-    return result.ok ? result.data : [];
+    if (result.ok) return result.data;
+    if (result.status !== 404) {
+      console.warn(`[api] getCategories failed: HTTP ${result.status} — /categories`);
+    }
+    return [];
   }
 
   async getActiveCategories(opts: RequestOptions = {}): Promise<Category[]> {
@@ -309,7 +317,11 @@ class ApiClient {
 
   async getBrands(opts: RequestOptions = {}): Promise<Brand[]> {
     const result = await this.request<Brand[]>('/brands', opts);
-    return result.ok ? result.data : [];
+    if (result.ok) return result.data;
+    if (result.status !== 404) {
+      console.warn(`[api] getBrands failed: HTTP ${result.status} — /brands`);
+    }
+    return [];
   }
 
   async getActiveBrands(opts: RequestOptions = {}): Promise<Brand[]> {
@@ -419,30 +431,24 @@ class ApiClient {
 
   // ---------------- Authentication ----------------
 
+  /**
+   * POST /auth/login — preserva a mensagem de erro do backend (ex.: "Conta
+   * bloqueada") usando `postAuth` em vez de `request`, que descartava o corpo
+   * da resposta de erro.
+   */
   async login(
     credentials: LoginCredentials,
-    opts: RequestOptions = {},
-  ): Promise<AuthResponse | null> {
-    const result = await this.request<AuthResponse>('/auth/login', {
-      ...opts,
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(credentials),
-    });
-    return result.ok ? result.data : null;
+  ): Promise<AuthRequestResult<AuthResponse>> {
+    return this.postAuth<AuthResponse>('/auth/login', credentials);
   }
 
+  /**
+   * POST /auth/register — idem: preserva a mensagem de erro.
+   */
   async register(
     data: RegisterData,
-    opts: RequestOptions = {},
-  ): Promise<AuthResponse | null> {
-    const result = await this.request<AuthResponse>('/auth/register', {
-      ...opts,
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    return result.ok ? result.data : null;
+  ): Promise<AuthRequestResult<AuthResponse>> {
+    return this.postAuth<AuthResponse>('/auth/register', data);
   }
 
   /**

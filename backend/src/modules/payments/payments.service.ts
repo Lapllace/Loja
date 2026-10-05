@@ -6,7 +6,15 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { OrderStatus, PaymentMethod, PaymentSource, PaymentStatus, UserRole } from '@prisma/client';
+import {
+  OrderStatus,
+  PaymentMethod,
+  PaymentSource,
+  PaymentStatus,
+  Prisma,
+  StockMovementType,
+  UserRole,
+} from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
@@ -52,6 +60,91 @@ export class PaymentsService {
     }
 
     return order;
+  }
+
+  /**
+   * Core method that applies a payment status change atomically.
+   * Handles Order status sync and stock compensation for cancellations.
+   * Idempotent: if payment is already in the target state, returns false.
+   *
+   * @returns true if the state was changed, false if it was already in target state
+   */
+  private async applyPaymentStatusChange(
+    payment: { id: string; orderId: string; status: PaymentStatus; order: { id: string; status: OrderStatus } },
+    newStatus: PaymentStatus,
+    tx: Prisma.TransactionClient,
+  ): Promise<boolean> {
+    // Idempotency: already in target state
+    if (payment.status === newStatus) {
+      return false;
+    }
+
+    const updatePaymentData: Prisma.PaymentUpdateInput = { status: newStatus };
+
+    if (newStatus === PaymentStatus.PAID) {
+      updatePaymentData.paidAt = new Date();
+    }
+
+    await tx.payment.update({
+      where: { id: payment.id },
+      data: updatePaymentData,
+    });
+
+    if (newStatus === PaymentStatus.PAID) {
+      await tx.order.update({
+        where: { id: payment.orderId },
+        data: { status: OrderStatus.PAID },
+      });
+    } else if (
+      newStatus === PaymentStatus.FAILED ||
+      newStatus === PaymentStatus.REFUNDED
+    ) {
+      const previousOrderStatus = payment.order.status;
+
+      // Only compensate stock if the order was not already CANCELLED/REFUNDED
+      const alreadyCancelled =
+        previousOrderStatus === OrderStatus.CANCELLED ||
+        previousOrderStatus === OrderStatus.REFUNDED;
+
+      const targetOrderStatus =
+        newStatus === PaymentStatus.REFUNDED
+          ? OrderStatus.REFUNDED
+          : OrderStatus.CANCELLED;
+
+      if (!alreadyCancelled) {
+        await tx.order.update({
+          where: { id: payment.orderId },
+          data: { status: targetOrderStatus },
+        });
+
+        // Restore stock for each order item
+        const orderItems = await tx.orderItem.findMany({
+          where: { orderId: payment.orderId },
+          select: { productId: true, quantity: true },
+        });
+
+        for (const item of orderItems) {
+          const product = await tx.product.update({
+            where: { id: item.productId },
+            data: { stock: { increment: item.quantity } },
+            select: { stock: true },
+          });
+
+          await tx.stockMovement.create({
+            data: {
+              productId: item.productId,
+              type: StockMovementType.RETURN,
+              quantity: item.quantity,
+              previousStock: product.stock - item.quantity,
+              currentStock: product.stock,
+              reason: `Payment ${newStatus.toLowerCase()} — order ${payment.orderId}`,
+            },
+          });
+        }
+      }
+    }
+
+    return true;
   }
 
   async create(user: any, data: CreatePaymentDto) {
@@ -109,8 +202,18 @@ export class PaymentsService {
       include: { order: { include: { user: true } } },
     });
 
+    // Fetch the order with items for PagBank (needed for item-level validation)
+    const orderWithItems = await this.prisma.order.findUnique({
+      where: { id: data.orderId },
+      include: { user: true, items: true },
+    });
+
+    if (!orderWithItems) {
+      throw new NotFoundException('Order not found');
+    }
+
     try {
-      const pagbankCheckout = await this.pagBankService.createPixCheckout(order, payment);
+      const pagbankCheckout = await this.pagBankService.createPixCheckout(orderWithItems, payment);
 
       const updated = await this.prisma.payment.update({
         where: { id: payment.id },
@@ -131,9 +234,13 @@ export class PaymentsService {
         expiresAt: pagbankCheckout.expiresAt,
       };
     } catch (error: any) {
-      await this.prisma.payment.update({
-        where: { id: payment.id },
-        data: { status: PaymentStatus.FAILED },
+      // On PagBank failure, compensate stock (order items were already decremented)
+      await this.prisma.$transaction(async (tx) => {
+        await this.applyPaymentStatusChange(
+          { id: payment.id, orderId: payment.orderId, status: PaymentStatus.PENDING, order: { id: payment.orderId, status: order.status } },
+          PaymentStatus.FAILED,
+          tx,
+        );
       });
 
       if (error instanceof ServiceUnavailableException) {
@@ -187,11 +294,9 @@ export class PaymentsService {
       throw new NotFoundException('Payment not found');
     }
 
-    const updated = await this.prisma.payment.update({
-      where: { id },
-      data: {
-        status: data.status,
-      },
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await this.applyPaymentStatusChange(payment, data.status, tx);
+      return tx.payment.findUnique({ where: { id } });
     });
 
     return this.serializePayment(updated);
@@ -280,20 +385,15 @@ export class PaymentsService {
 
     if (status.includes('PAID') || status.includes('APPROVED') || status.includes('AUTHORIZED') || status.includes('CONFIRMED')) {
       await this.prisma.$transaction(async (tx) => {
+        // Update transactionId before applying status change
         await tx.payment.update({
           where: { id: payment.id },
           data: {
-            status: PaymentStatus.PAID,
-            paidAt: new Date(),
             provider: 'PAGBANK',
             transactionId: transactionId || payment.transactionId,
           },
         });
-
-        await tx.order.update({
-          where: { id: payment.orderId },
-          data: { status: OrderStatus.PAID },
-        });
+        await this.applyPaymentStatusChange(payment, PaymentStatus.PAID, tx);
       });
 
       return { ok: true, paymentId: payment.id, orderId: payment.orderId, status: 'PAID' };
@@ -308,9 +408,8 @@ export class PaymentsService {
     }
 
     if (status.includes('FAILED') || status.includes('CANCEL') || status.includes('REJECTED')) {
-      await this.prisma.payment.update({
-        where: { id: payment.id },
-        data: { status: PaymentStatus.FAILED },
+      await this.prisma.$transaction(async (tx) => {
+        await this.applyPaymentStatusChange(payment, PaymentStatus.FAILED, tx);
       });
       return { ok: true, paymentId: payment.id, orderId: payment.orderId, status: 'FAILED' };
     }

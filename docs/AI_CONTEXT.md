@@ -97,7 +97,7 @@ PAGAMENTOS
 
 Loja física: PIX, dinheiro e cartão (fora do sistema).
 
-Loja virtual: integração Asaas (PIX, cartão, boleto).
+Loja virtual: integração PagBank (PIX, cartão, boleto).
 
 ==========================================================
 

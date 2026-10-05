@@ -4,7 +4,7 @@ import {
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, StockMovementType } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -299,8 +299,9 @@ export class ProductsService {
   /**
    * @param imageUrls Quando enviadas, substituem as imagens atuais do produto
    *                  (a primeira passa a ser a imagem principal).
+   * @param userId    ID do admin que está fazendo a alteração (para StockMovement).
    */
-  async update(id: string, data: UpdateProductDto, imageUrls: string[] = []) {
+  async update(id: string, data: UpdateProductDto, imageUrls: string[] = [], userId?: string) {
     if (data.categoryId !== undefined) {
       const category = await this.prisma.category.findUnique({
         where: { id: data.categoryId },
@@ -319,6 +320,19 @@ export class ProductsService {
           throw new BadRequestException('Brand not found');
         }
       }
+    }
+
+    // If stock is changing, read current stock before the update for StockMovement.
+    let previousStock: number | undefined;
+    if (data.stock !== undefined) {
+      const current = await this.prisma.product.findUnique({
+        where: { id },
+        select: { stock: true },
+      });
+      if (!current) {
+        throw new NotFoundException('Product not found');
+      }
+      previousStock = current.stock;
     }
 
     const updateData: Prisma.ProductUpdateInput = {};
@@ -350,54 +364,110 @@ export class ProductsService {
         : { disconnect: true };
     }
 
-    // Novas imagens substituem as anteriores (delete + create em transação).
+    // Novas imagens: substituem as anteriores ou respeitam keepImageIds.
     if (imageUrls.length > 0) {
-      updateData.images = {
-        deleteMany: {},
-        create: imageUrls.map((url, index) => ({
-          url,
-          alt: data.name ?? undefined,
-          position: index,
-        })),
-      };
+      if (data.keepImageIds && data.keepImageIds.length > 0) {
+        updateData.images = {
+          deleteMany: { id: { notIn: data.keepImageIds } },
+          create: imageUrls.map((url, index) => ({
+            url,
+            alt: data.name ?? undefined,
+            position: (data.keepImageIds?.length ?? 0) + index,
+          })),
+        };
+      } else if (data.keepImageIds !== undefined) {
+        // keepImageIds is explicitly [] — delete all, then create new
+        updateData.images = {
+          deleteMany: {},
+          create: imageUrls.map((url, index) => ({
+            url,
+            alt: data.name ?? undefined,
+            position: index,
+          })),
+        };
+      } else {
+        // keepImageIds not provided — backward-compatible delete-all
+        updateData.images = {
+          deleteMany: {},
+          create: imageUrls.map((url, index) => ({
+            url,
+            alt: data.name ?? undefined,
+            position: index,
+          })),
+        };
+      }
     }
 
+    const productSelect = {
+      id: true,
+      sku: true,
+      name: true,
+      slug: true,
+      description: true,
+      shortDescription: true,
+      price: true,
+      comparePrice: true,
+      stock: true,
+      active: true,
+      featured: true,
+      weight: true,
+      width: true,
+      height: true,
+      length: true,
+      categoryId: true,
+      brandId: true,
+      createdAt: true,
+      updatedAt: true,
+      images: {
+        orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] as Prisma.ProductImageOrderByWithRelationInput[],
+        select: {
+          id: true,
+          url: true,
+          alt: true,
+          position: true,
+          productId: true,
+          createdAt: true,
+        },
+      },
+    } as const;
+
     try {
+      // If stock changed, wrap update + StockMovement in a transaction.
+      if (data.stock !== undefined && previousStock !== undefined && data.stock !== previousStock) {
+        const newStock = data.stock;
+        const delta = newStock - previousStock;
+        const quantity = Math.abs(delta);
+
+        const product = await this.prisma.$transaction(async (tx) => {
+          const updated = await tx.product.update({
+            where: { id },
+            data: updateData,
+            select: productSelect,
+          });
+
+          await tx.stockMovement.create({
+            data: {
+              productId: id,
+              type: StockMovementType.ADJUSTMENT,
+              quantity,
+              previousStock,
+              currentStock: newStock,
+              reason: 'Admin manual adjustment',
+              ...(userId ? { createdById: userId } : {}),
+            },
+          });
+
+          return updated;
+        });
+
+        return product;
+      }
+
+      // No stock change — plain update.
       const product = await this.prisma.product.update({
         where: { id },
         data: updateData,
-        select: {
-          id: true,
-          sku: true,
-          name: true,
-          slug: true,
-          description: true,
-          shortDescription: true,
-          price: true,
-          comparePrice: true,
-          stock: true,
-          active: true,
-          featured: true,
-          weight: true,
-          width: true,
-          height: true,
-          length: true,
-          categoryId: true,
-          brandId: true,
-          createdAt: true,
-          updatedAt: true,
-          images: {
-            orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
-            select: {
-              id: true,
-              url: true,
-              alt: true,
-              position: true,
-              productId: true,
-              createdAt: true,
-            },
-          },
-        },
+        select: productSelect,
       });
       return product;
     } catch (err: any) {

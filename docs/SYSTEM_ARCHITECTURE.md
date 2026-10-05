@@ -27,7 +27,7 @@ ARQUITETURA GERAL
 
 Frontend (Next.js)
         ↓
-REST API (/api/v1)
+REST API (/api)
         ↓
 Backend (NestJS)
         ↓
@@ -37,7 +37,7 @@ PostgreSQL
 
 Imagens → storage/ (local)
 
-Pagamentos online → Asaas (webhook)
+Pagamentos online → PagBank (webhook)
 
 ==========================================================
 
@@ -49,7 +49,7 @@ Backend: NestJS, TypeScript, Prisma ORM
 
 Banco: PostgreSQL
 
-Pagamentos: Asaas
+Pagamentos: PagBank
 
 Produção: Docker no Umbrel
 
@@ -162,7 +162,7 @@ orders — CRUD, fluxo de status, origin + channel
 
 stock — movimentações e histórico
 
-payments — integração Asaas, webhook
+payments — integração PagBank, webhook
 
 dashboard — métricas operacionais (+ financeiras para ADMIN)
 
@@ -282,21 +282,21 @@ Backend bloqueia dados financeiros para EMPLOYEE.
 
 API
 
-REST, JSON, versionada em /api/v1.
+REST, JSON, em /api.
 
 Consultar API.md para endpoints.
 
 ==========================================================
 
-PAGAMENTOS (ASAAS)
+PAGAMENTOS (PAGBANK)
 
 Fluxo:
 
 1. Cliente finaliza checkout no site
 2. Backend cria pedido (AGUARDANDO_PAGAMENTO)
-3. Backend cria cobrança no Asaas
+3. Backend cria cobrança no PagBank
 4. Cliente paga (PIX/cartão/boleto)
-5. Asaas envia webhook
+5. PagBank envia webhook
 6. Backend confirma pagamento → PAGO
 7. Estoque reduzido, movimentação VENDA registrada
 

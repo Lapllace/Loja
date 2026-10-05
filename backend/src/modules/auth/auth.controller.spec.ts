@@ -4,6 +4,7 @@ import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
 import { UnauthorizedException, ForbiddenException } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RecaptchaGuard } from '../../common/guards/recaptcha.guard';
 import { UserStatus, UserRole } from '@prisma/client';
 
 describe('AuthController', () => {
@@ -47,6 +48,8 @@ describe('AuthController', () => {
       ],
     })
       .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(RecaptchaGuard)
       .useValue({ canActivate: () => true })
       .compile();
 

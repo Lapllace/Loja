@@ -165,12 +165,12 @@ export class AuthManager {
     rememberMe = true,
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      const response = await api.login({ email, password });
-      
-      if (response) {
+      const result = await api.login({ email, password });
+
+      if (result.ok) {
         this.session = {
-          user: response.user,
-          token: response.accessToken,
+          user: result.data.user,
+          token: result.data.accessToken,
         };
         this.storage = rememberMe ? 'local' : 'session';
         this.saveSession();
@@ -178,8 +178,9 @@ export class AuthManager {
         await this.executePostLoginCallbacks();
         return { success: true };
       }
-      
-      return { success: false, error: 'Credenciais inválidas' };
+
+      // Preserva a mensagem real do backend (ex.: "Conta bloqueada").
+      return { success: false, error: result.message || 'Credenciais inválidas' };
     } catch (error) {
       console.error('Login failed:', error);
       return { success: false, error: 'Erro ao fazer login' };
@@ -188,12 +189,12 @@ export class AuthManager {
 
   public async register(data: { name: string; email: string; password: string; phone?: string; cpf?: string }): Promise<{ success: boolean; error?: string }> {
     try {
-      const response = await api.register(data);
-      
-      if (response) {
+      const result = await api.register(data);
+
+      if (result.ok) {
         this.session = {
-          user: response.user,
-          token: response.accessToken,
+          user: result.data.user,
+          token: result.data.accessToken,
         };
         this.storage = 'local';
         this.saveSession();
@@ -201,8 +202,9 @@ export class AuthManager {
         await this.executePostLoginCallbacks();
         return { success: true };
       }
-      
-      return { success: false, error: 'Erro ao criar conta' };
+
+      // Preserva a mensagem real do backend (ex.: "Email já em uso").
+      return { success: false, error: result.message || 'Erro ao criar conta' };
     } catch (error) {
       console.error('Register failed:', error);
       return { success: false, error: 'Erro ao criar conta' };

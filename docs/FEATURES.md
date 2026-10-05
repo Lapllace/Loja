@@ -126,7 +126,7 @@ Carrinho (localStorage)
 
 Checkout com dados do cliente e entrega
 
-Pagamento via Asaas (PIX, cartão, boleto)
+Pagamento via PagBank (PIX, cartão, boleto)
 
 Confirmação de pedido
 
@@ -146,7 +146,7 @@ Suporte a múltiplos usuários
 
 # PAGAMENTO ONLINE
 
-Integração Asaas
+Integração PagBank
 
 Webhook de confirmação
 

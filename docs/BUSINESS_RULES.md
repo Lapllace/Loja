@@ -63,7 +63,7 @@ Reserva quantidade enquanto pagamento online está pendente.
 
 Pedido AGUARDANDO_PAGAMENTO → reserved_stock += quantidade.
 
-Pagamento confirmado (webhook Asaas) → stock -= quantidade, reserved_stock -= quantidade.
+Pagamento confirmado (webhook PagBank) → stock -= quantidade, reserved_stock -= quantidade.
 
 Pagamento expirado ou cancelado → reserved_stock -= quantidade (stock inalterado).
 
@@ -153,7 +153,7 @@ Todos utilizam o mesmo fluxo, estoque, produtos e clientes.
 Status:
 
 CRIADO
-→ AGUARDANDO_PAGAMENTO (pedidos online via Asaas)
+→ AGUARDANDO_PAGAMENTO (pedidos online via PagBank)
 → PAGO
 → SEPARANDO
 → PRONTO_PARA_ENTREGA
@@ -162,7 +162,7 @@ CRIADO
 
 Pedidos presenciais (LOCAL) normalmente entram direto como PAGO.
 
-Pedidos online (SITE) passam por AGUARDANDO_PAGAMENTO até confirmação Asaas.
+Pedidos online (SITE) passam por AGUARDANDO_PAGAMENTO até confirmação PagBank.
 
 Pedidos WhatsApp/Instagram (ONLINE) podem entrar como PAGO (pagamento externo).
 
