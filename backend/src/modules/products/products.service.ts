@@ -322,19 +322,6 @@ export class ProductsService {
       }
     }
 
-    // If stock is changing, read current stock before the update for StockMovement.
-    let previousStock: number | undefined;
-    if (data.stock !== undefined) {
-      const current = await this.prisma.product.findUnique({
-        where: { id },
-        select: { stock: true },
-      });
-      if (!current) {
-        throw new NotFoundException('Product not found');
-      }
-      previousStock = current.stock;
-    }
-
     const updateData: Prisma.ProductUpdateInput = {};
     if (data.sku !== undefined) updateData.sku = data.sku;
     if (data.name !== undefined) updateData.name = data.name;
@@ -432,35 +419,50 @@ export class ProductsService {
     } as const;
 
     try {
-      // If stock changed, wrap update + StockMovement in a transaction.
-      if (data.stock !== undefined && previousStock !== undefined && data.stock !== previousStock) {
-        const newStock = data.stock;
-        const delta = newStock - previousStock;
-        const quantity = Math.abs(delta);
+      // Keep stock read, write and movement in one SERIALIZABLE transaction.
+      // PostgreSQL aborts conflicting writers; retrying then records the real
+      // previous/current values instead of stale history.
+      const desiredStock = data.stock;
+      if (desiredStock !== undefined) {
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          try {
+            return await this.prisma.$transaction(
+              async (tx) => {
+                const current = await tx.product.findUnique({
+                  where: { id },
+                  select: { stock: true },
+                });
+                if (!current) {
+                  throw new NotFoundException('Product not found');
+                }
 
-        const product = await this.prisma.$transaction(async (tx) => {
-          const updated = await tx.product.update({
-            where: { id },
-            data: updateData,
-            select: productSelect,
-          });
-
-          await tx.stockMovement.create({
-            data: {
-              productId: id,
-              type: StockMovementType.ADJUSTMENT,
-              quantity,
-              previousStock,
-              currentStock: newStock,
-              reason: 'Admin manual adjustment',
-              ...(userId ? { createdById: userId } : {}),
-            },
-          });
-
-          return updated;
-        });
-
-        return product;
+                const updated = await tx.product.update({
+                  where: { id },
+                  data: updateData,
+                  select: productSelect,
+                });
+                const delta = desiredStock - current.stock;
+                if (delta !== 0) {
+                  await tx.stockMovement.create({
+                    data: {
+                      productId: id,
+                      type: StockMovementType.ADJUSTMENT,
+                      quantity: Math.abs(delta),
+                      previousStock: current.stock,
+                      currentStock: desiredStock,
+                      reason: 'Admin manual adjustment',
+                      ...(userId ? { createdById: userId } : {}),
+                    },
+                  });
+                }
+                return updated;
+              },
+              { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+            );
+          } catch (err: any) {
+            if (err?.code !== 'P2034' || attempt === 2) throw err;
+          }
+        }
       }
 
       // No stock change — plain update.

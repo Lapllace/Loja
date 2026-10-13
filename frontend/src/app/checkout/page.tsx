@@ -262,7 +262,7 @@ export default function CheckoutPage() {
     }
 
     setSubmitting(true);
-    const lockedShipping = { price: selectedShipping.price, optionName: selectedShipping.name };
+    const lockedShipping = { optionId: selectedShipping.id, optionName: selectedShipping.name };
     try {
       let addressId = selectedAddressId;
       if (selectedAddressId === 'new') {

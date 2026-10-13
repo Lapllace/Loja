@@ -178,6 +178,8 @@ export interface Order {
   discount: number | string;
   total: number | string;
   notes?: string | null;
+  /** Identificador estável da opção de frete escolhida. */
+  shippingOptionId?: string | null;
   /** Nome da opção de frete escolhida no checkout (ex.: "Motoboy / Entrega Local"). */
   shippingOptionName?: string | null;
   createdAt: string;

@@ -25,9 +25,11 @@ describe('PaymentsService', () => {
       findUnique: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
       findMany: jest.fn(),
       findFirst: jest.fn(),
     },
+    delivery: { updateMany: jest.fn() },
     $transaction: jest.fn(),
   };
 
@@ -41,6 +43,7 @@ describe('PaymentsService', () => {
     jest.clearAllMocks();
     pagBankMock.isWebhookTokenConfigured.mockReturnValue(true);
     pagBankMock.validateWebhookToken.mockReturnValue(true);
+    prismaMock.payment.updateMany.mockResolvedValue({ count: 1 });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -284,7 +287,10 @@ describe('PaymentsService', () => {
     });
     prismaMock.$transaction.mockImplementation(async (cb: any) =>
       cb({
-        payment: { update: jest.fn().mockResolvedValue({}) },
+        payment: {
+          update: jest.fn().mockResolvedValue({}),
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        },
         order: { update: jest.fn().mockResolvedValue({}) },
       }),
     );
@@ -320,6 +326,91 @@ describe('PaymentsService', () => {
         status: PaymentStatus.PAID,
       }),
     ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('should restore stock and create one return movement when cancelling a pending order without payment', async () => {
+    const pendingOrder = {
+      id: 'order-1',
+      status: OrderStatus.PENDING,
+      payment: null,
+    };
+    const cancelledOrder = {
+      id: 'order-1',
+      status: OrderStatus.CANCELLED,
+      items: [],
+    };
+    const tx = {
+      order: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValueOnce(pendingOrder)
+          .mockResolvedValueOnce(cancelledOrder),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      orderItem: {
+        findMany: jest.fn().mockResolvedValue([
+          { productId: 'product-1', quantity: 2 },
+        ]),
+      },
+      product: {
+        update: jest.fn().mockResolvedValue({ stock: 8 }),
+      },
+      stockMovement: { create: jest.fn().mockResolvedValue({}) },
+      delivery: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    };
+    prismaMock.$transaction.mockImplementation(async (callback: any) => callback(tx));
+
+    await expect(
+      service.cancelOrRefundOrder('order-1', OrderStatus.CANCELLED),
+    ).resolves.toEqual(cancelledOrder);
+
+    expect(tx.order.updateMany).toHaveBeenCalledWith({
+      where: { id: 'order-1', status: OrderStatus.PENDING },
+      data: { status: OrderStatus.CANCELLED },
+    });
+    expect(tx.product.update).toHaveBeenCalledTimes(1);
+    expect(tx.stockMovement.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        productId: 'product-1',
+        type: 'RETURN',
+        quantity: 2,
+        previousStock: 6,
+        currentStock: 8,
+      }),
+    });
+  });
+
+  it('should not compensate stock when a concurrent cancellation already changed the order', async () => {
+    const tx = {
+      order: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValueOnce({
+            id: 'order-1',
+            status: OrderStatus.PENDING,
+            payment: null,
+          })
+          .mockResolvedValueOnce({
+            id: 'order-1',
+            status: OrderStatus.CANCELLED,
+            items: [],
+          }),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      orderItem: { findMany: jest.fn() },
+      product: { update: jest.fn() },
+      stockMovement: { create: jest.fn() },
+      delivery: { updateMany: jest.fn() },
+    };
+    prismaMock.$transaction.mockImplementation(async (callback: any) => callback(tx));
+
+    await expect(
+      service.cancelOrRefundOrder('order-1', OrderStatus.CANCELLED),
+    ).resolves.toMatchObject({ status: OrderStatus.CANCELLED });
+
+    expect(tx.orderItem.findMany).not.toHaveBeenCalled();
+    expect(tx.product.update).not.toHaveBeenCalled();
+    expect(tx.stockMovement.create).not.toHaveBeenCalled();
   });
 
   it('should keep amount derived from Order.total', async () => {

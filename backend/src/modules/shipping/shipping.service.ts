@@ -90,6 +90,9 @@ export class ShippingService {
 
     try {
       options = await this.fetchSuperfreteOptions(zipcode, pkg);
+      if (this.normalize(options).length === 0) {
+        throw new Error('SuperFrete returned no usable shipping options');
+      }
       source = 'superfrete';
     } catch (error) {
       // Nunca derruba o checkout por falha da transportadora: segue no fallback.

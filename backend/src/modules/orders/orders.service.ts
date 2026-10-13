@@ -18,6 +18,7 @@ import {
 import { PrismaService } from '../../database/prisma.service';
 import { MetaWhatsappService } from '../notifications/meta-whatsapp.service';
 import { ShippingService } from '../shipping/shipping.service';
+import { PaymentsService } from '../payments/payments.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 
@@ -50,6 +51,7 @@ export class OrdersService {
     private readonly prisma: PrismaService,
     private readonly whatsapp: MetaWhatsappService,
     private readonly shippingService: ShippingService,
+    private readonly paymentsService: PaymentsService,
   ) {}
 
   private serializeItem(item: OrderItem, includeCostPrice: boolean) {
@@ -94,6 +96,7 @@ export class OrdersService {
       shippingCity: order.shippingCity,
       shippingState: order.shippingState,
       shippingReference: order.shippingReference,
+      shippingOptionId: order.shippingOptionId,
       shippingOptionName: order.shippingOptionName,
       createdAt: order.createdAt,
       updatedAt: order.updatedAt,
@@ -149,8 +152,6 @@ export class OrdersService {
   ) {
     for (const { cartItem, product, itemTotal } of validatedItems) {
       const quantity = cartItem.quantity;
-      const previousStock = product.stock;
-
       const decrementResult = await tx.product.updateMany({
         where: {
           id: product.id,
@@ -167,7 +168,15 @@ export class OrdersService {
         );
       }
 
-      const currentStock = previousStock - quantity;
+      const updatedProduct = await tx.product.findUnique({
+        where: { id: product.id },
+        select: { stock: true },
+      });
+      if (!updatedProduct) {
+        throw new NotFoundException('Product not found during stock decrement');
+      }
+      const currentStock = updatedProduct.stock;
+      const previousStock = currentStock + quantity;
 
       await tx.orderItem.create({
         data: {
@@ -306,8 +315,10 @@ export class OrdersService {
     // Server-side shipping validation: recalculate shipping using actual cart items.
     // This prevents clients from sending arbitrary shipping prices.
     let serverShipping = new Prisma.Decimal(0);
+    let validatedShippingOptionId: string | null = null;
+    let validatedShippingOptionName: string | null = null;
 
-    if (data.shippingOptionName) {
+    if (data.shippingOptionId || data.shippingOptionName) {
       // Pre-fetch cart items to calculate shipping before transaction
       const cart = await this.prisma.cart.findUnique({
         where: { userId },
@@ -325,21 +336,23 @@ export class OrdersService {
           items: shippingItems,
         });
 
-        const matchedOption = quote.options.find(
-          (opt) => opt.name === data.shippingOptionName,
-        );
+        const matchedOption = data.shippingOptionId
+          ? quote.options.find((opt) => opt.id === data.shippingOptionId)
+          : quote.options.find((opt) => opt.name === data.shippingOptionName);
 
         if (!matchedOption) {
           throw new BadRequestException(
-            `Shipping option '${data.shippingOptionName}' is not available for this address`,
+            'Selected shipping option is not available for this address',
           );
         }
 
         serverShipping = new Prisma.Decimal(matchedOption.price.toFixed(2));
+        validatedShippingOptionId = matchedOption.id;
+        validatedShippingOptionName = matchedOption.name;
       }
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const createdOrder = await this.prisma.$transaction(async (tx) => {
       const cart = await tx.cart.findUnique({
         where: { userId },
         include: { items: true },
@@ -367,7 +380,8 @@ export class OrdersService {
           discount,
           total,
           notes: data.notes ?? null,
-          shippingOptionName: data.shippingOptionName ?? null,
+          shippingOptionId: validatedShippingOptionId,
+          shippingOptionName: validatedShippingOptionName,
           shippingRecipient: address.recipient,
           shippingZipcode: address.zipcode,
           shippingStreet: address.street,
@@ -393,11 +407,15 @@ export class OrdersService {
         throw new NotFoundException('Order not found after creation');
       }
 
-      // Dispara notificação fora da transação (fire-and-forget).
-      this.fireOrderCreated(order.id, order.number, total);
-
       return this.serializeOrder(created, { role: UserRole.CUSTOMER });
     });
+
+    this.fireOrderCreated(
+      createdOrder.id,
+      createdOrder.number,
+      createdOrder.total,
+    );
+    return createdOrder;
   }
 
   async findAll(user: SerializedUser) {
@@ -450,9 +468,9 @@ export class OrdersService {
     }
 
     const VALID_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]>> = {
-      [OrderStatus.PENDING]:    [OrderStatus.PAID, OrderStatus.CANCELLED],
+      [OrderStatus.PENDING]:    [OrderStatus.CANCELLED],
       [OrderStatus.PAID]:       [OrderStatus.PROCESSING, OrderStatus.REFUNDED],
-      [OrderStatus.PROCESSING]: [OrderStatus.SHIPPED, OrderStatus.CANCELLED],
+      [OrderStatus.PROCESSING]: [OrderStatus.SHIPPED],
       [OrderStatus.SHIPPED]:    [OrderStatus.DELIVERED],
       [OrderStatus.DELIVERED]:  [OrderStatus.REFUNDED],
       [OrderStatus.CANCELLED]:  [],
@@ -466,11 +484,15 @@ export class OrdersService {
       );
     }
 
-    const updated = await this.prisma.order.update({
-      where: { id },
-      data: { status: data.status },
-      include: { items: true },
-    });
+    const updated =
+      data.status === OrderStatus.CANCELLED ||
+      data.status === OrderStatus.REFUNDED
+        ? await this.paymentsService.cancelOrRefundOrder(id, data.status)
+        : await this.prisma.order.update({
+            where: { id },
+            data: { status: data.status },
+            include: { items: true },
+          });
 
     // Fire-and-forget notifications based on the new status.
     if (data.status === OrderStatus.PAID) {

@@ -228,7 +228,9 @@ model Order {
 
   notes String?
 
-  // Nome da opção de frete escolhida no checkout (ex.: "Motoboy / Entrega Local").
+  // Identificador estável e nome exibido da opção escolhida no checkout.
+  // O nome é mantido para compatibilidade e histórico de pedidos antigos.
+  shippingOptionId   String?
   shippingOptionName String?
 
   shippingRecipient  String

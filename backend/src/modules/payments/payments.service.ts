@@ -7,6 +7,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import {
+  DeliveryStatus,
   OrderStatus,
   PaymentMethod,
   PaymentSource,
@@ -79,16 +80,31 @@ export class PaymentsService {
       return false;
     }
 
+    const allowedTransitions: Partial<Record<PaymentStatus, PaymentStatus[]>> = {
+      [PaymentStatus.PENDING]: [PaymentStatus.PAID, PaymentStatus.FAILED],
+      [PaymentStatus.PAID]: [PaymentStatus.REFUNDED],
+      [PaymentStatus.FAILED]: [],
+      [PaymentStatus.REFUNDED]: [],
+    };
+    if (!(allowedTransitions[payment.status] ?? []).includes(newStatus)) {
+      throw new BadRequestException(
+        `Cannot transition payment from ${payment.status} to ${newStatus}`,
+      );
+    }
+
     const updatePaymentData: Prisma.PaymentUpdateInput = { status: newStatus };
 
     if (newStatus === PaymentStatus.PAID) {
       updatePaymentData.paidAt = new Date();
     }
 
-    await tx.payment.update({
-      where: { id: payment.id },
+    const paymentUpdate = await tx.payment.updateMany({
+      where: { id: payment.id, status: payment.status },
       data: updatePaymentData,
     });
+    if (paymentUpdate.count !== 1) {
+      return false;
+    }
 
     if (newStatus === PaymentStatus.PAID) {
       await tx.order.update({
@@ -141,10 +157,146 @@ export class PaymentsService {
             },
           });
         }
+
+        await tx.delivery.updateMany({
+          where: {
+            orderId: payment.orderId,
+            status: {
+              notIn: [DeliveryStatus.DELIVERED, DeliveryStatus.CANCELLED],
+            },
+          },
+          data: { status: DeliveryStatus.CANCELLED },
+        });
       }
     }
 
     return true;
+  }
+
+  /**
+   * Applies the same commercial effects used by payment callbacks when an
+   * administrator cancels or refunds an order. This keeps order, payment,
+   * stock movements and delivery aligned in one transaction.
+   */
+  async cancelOrRefundOrder(
+    orderId: string,
+    targetStatus: OrderStatus,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const order = await tx.order.findUnique({
+        where: { id: orderId },
+        include: { payment: true },
+      });
+      if (!order) {
+        throw new NotFoundException('Order not found');
+      }
+
+      if (
+        order.status === OrderStatus.CANCELLED ||
+        order.status === OrderStatus.REFUNDED
+      ) {
+        const existing = await tx.order.findUnique({
+          where: { id: orderId },
+          include: { items: true },
+        });
+        if (!existing) {
+          throw new NotFoundException('Order not found');
+        }
+        return existing;
+      }
+
+      if (targetStatus === OrderStatus.CANCELLED) {
+        if (order.status !== OrderStatus.PENDING) {
+          throw new BadRequestException(
+            `Cannot cancel order from ${order.status}; use refund for paid orders`,
+          );
+        }
+
+        if (order.payment) {
+          await this.applyPaymentStatusChange(
+            {
+              id: order.payment.id,
+              orderId,
+              status: order.payment.status,
+              order: { id: order.id, status: order.status },
+            },
+            PaymentStatus.FAILED,
+            tx,
+          );
+        } else {
+          const cancellation = await tx.order.updateMany({
+            where: { id: orderId, status: OrderStatus.PENDING },
+            data: { status: OrderStatus.CANCELLED },
+          });
+          if (cancellation.count !== 1) {
+            const current = await tx.order.findUnique({
+              where: { id: orderId },
+              include: { items: true },
+            });
+            if (
+              current &&
+              (current.status === OrderStatus.CANCELLED ||
+                current.status === OrderStatus.REFUNDED)
+            ) {
+              return current;
+            }
+            throw new BadRequestException('Order status changed during cancellation');
+          }
+
+          const orderItems = await tx.orderItem.findMany({
+            where: { orderId },
+            select: { productId: true, quantity: true },
+          });
+          for (const item of orderItems) {
+            const product = await tx.product.update({
+              where: { id: item.productId },
+              data: { stock: { increment: item.quantity } },
+              select: { stock: true },
+            });
+            await tx.stockMovement.create({
+              data: {
+                productId: item.productId,
+                type: StockMovementType.RETURN,
+                quantity: item.quantity,
+                previousStock: product.stock - item.quantity,
+                currentStock: product.stock,
+                reason: `Order cancelled — order ${orderId}`,
+              },
+            });
+          }
+          await tx.delivery.updateMany({
+            where: {
+              orderId,
+              status: { notIn: [DeliveryStatus.DELIVERED, DeliveryStatus.CANCELLED] },
+            },
+            data: { status: DeliveryStatus.CANCELLED },
+          });
+        }
+      } else {
+        if (!order.payment || order.payment.status !== PaymentStatus.PAID) {
+          throw new BadRequestException('Only paid orders can be refunded');
+        }
+        await this.applyPaymentStatusChange(
+          {
+            id: order.payment.id,
+            orderId,
+            status: order.payment.status,
+            order: { id: order.id, status: order.status },
+          },
+          PaymentStatus.REFUNDED,
+          tx,
+        );
+      }
+
+      const updated = await tx.order.findUnique({
+        where: { id: orderId },
+        include: { items: true },
+      });
+      if (!updated) {
+        throw new NotFoundException('Order not found after status change');
+      }
+      return updated;
+    });
   }
 
   async create(user: any, data: CreatePaymentDto) {
@@ -162,8 +314,13 @@ export class PaymentsService {
       throw new BadRequestException('Only ONLINE orders can use PagBank');
     }
 
-    if (order.status === OrderStatus.REFUNDED) {
-      throw new BadRequestException('Order is refunded and cannot receive a new payment');
+    if (
+      order.status === OrderStatus.CANCELLED ||
+      order.status === OrderStatus.REFUNDED
+    ) {
+      throw new BadRequestException(
+        'Cancelled or refunded orders cannot receive a new payment',
+      );
     }
 
     const existing = await this.prisma.payment.findUnique({
@@ -379,7 +536,7 @@ export class PaymentsService {
       throw new NotFoundException('Payment not found for PagBank webhook');
     }
 
-    if (payment.status === PaymentStatus.PAID) {
+    if (payment.status !== PaymentStatus.PENDING) {
       return { ok: true, idempotent: true, paymentId: payment.id, orderId: payment.orderId };
     }
 
@@ -400,6 +557,15 @@ export class PaymentsService {
     }
 
     if (status.includes('PENDING')) {
+      if (payment.status !== PaymentStatus.PENDING) {
+        return {
+          ok: true,
+          idempotent: true,
+          paymentId: payment.id,
+          orderId: payment.orderId,
+          status: payment.status,
+        };
+      }
       await this.prisma.payment.update({
         where: { id: payment.id },
         data: { status: PaymentStatus.PENDING },

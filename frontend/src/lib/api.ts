@@ -649,7 +649,7 @@ class ApiClient {
     addressId: string,
     notes?: string,
     token?: string,
-    shipping?: { price: number; optionName: string },
+    shipping?: { optionId: string; optionName: string },
   ): Promise<ApiResult<Order>> {
     const resolved = this.resolveToken(token);
     if (!resolved) return { ok: false, status: 401 };
@@ -663,7 +663,12 @@ class ApiClient {
       body: JSON.stringify({
         addressId,
         ...(notes ? { notes } : {}),
-        ...(shipping ? { shipping: shipping.price, shippingOptionName: shipping.optionName } : {}),
+        ...(shipping
+          ? {
+              shippingOptionId: shipping.optionId,
+              shippingOptionName: shipping.optionName,
+            }
+          : {}),
       }),
     });
   }

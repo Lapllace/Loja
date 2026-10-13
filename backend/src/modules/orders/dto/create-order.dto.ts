@@ -22,7 +22,13 @@ export class CreateOrderDto {
   @Max(999.99)
   shipping?: number;
 
-  /** Nome da opção de frete escolhida (ex.: "Motoboy / Entrega Local"). */
+  /** Identificador estável da opção de frete devolvida pela cotação. */
+  @IsOptional()
+  @IsString()
+  @Length(1, 120)
+  shippingOptionId?: string;
+
+  /** Nome exibido da opção de frete escolhida (mantido para o histórico). */
   @IsOptional()
   @IsString()
   @Length(0, 80)
