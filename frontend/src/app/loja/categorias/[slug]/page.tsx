@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { api } from '@/lib/api';
 import { ProductGrid } from '@/components/product/ProductGrid';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { CatalogHeader } from '@/components/catalog/CatalogHeader';
 
 // Página de categoria (Server Component)
 export const revalidate = 60;
@@ -51,17 +52,22 @@ export default async function CategoryPage({ params }: PageProps) {
 
   if (category === 'unavailable') {
     return (
-      <div className="py-12">
+      <div className="pb-16 pt-6 md:pt-8">
         <div className="container-custom">
-          <EmptyState
-            title="Não foi possível carregar a categoria"
-            description="A API não está disponível no momento. Tente novamente em alguns instantes."
-            action={
-              <Link href="/loja/produtos" className="text-accent hover:underline text-sm font-medium">
-                Ver todos os produtos
-              </Link>
-            }
-          />
+          <div className="rounded-2xl border border-border bg-card">
+            <EmptyState
+              title="Não foi possível carregar a categoria"
+              description="A API não está disponível no momento. Tente novamente em alguns instantes."
+              action={
+                <Link
+                  href="/loja/produtos"
+                  className="text-sm font-semibold text-accent transition-colors hover:text-accent-dark hover:underline"
+                >
+                  Ver todos os produtos
+                </Link>
+              }
+            />
+          </div>
         </div>
       </div>
     );
@@ -79,43 +85,42 @@ export default async function CategoryPage({ params }: PageProps) {
   );
 
   return (
-    <div className="py-8 md:py-10">
+    <div className="pb-16 pt-6 md:pt-8">
       <div className="container-custom">
-        {/* Breadcrumb */}
-        <nav aria-label="Navegação estrutural" className="mb-6 text-sm text-muted-foreground">
-          <ol className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <li>
-              <Link href="/loja" className="hover:text-accent">Início</Link>
-            </li>
-            <li aria-hidden="true">/</li>
-            <li>
-              <Link href="/loja/produtos" className="hover:text-accent">Produtos</Link>
-            </li>
-            <li aria-hidden="true">/</li>
-            <li aria-current="page" className="text-foreground font-medium">
-              {category.name}
-            </li>
-          </ol>
-        </nav>
+        <CatalogHeader
+          breadcrumbs={[
+            { label: 'Início', href: '/loja' },
+            { label: 'Produtos', href: '/loja/produtos' },
+            { label: category.name },
+          ]}
+          eyebrow="Categoria"
+          title={category.name}
+          description={
+            category.description ??
+            'Confira os produtos disponíveis nesta categoria.'
+          }
+          count={products.length}
+          actions={
+            <Link
+              href="/loja/produtos"
+              className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-xs font-semibold text-muted-foreground shadow-sm transition-colors hover:border-accent/40 hover:text-accent"
+            >
+              <span aria-hidden="true">←</span>
+              Ver catálogo completo
+            </Link>
+          }
+        />
 
-        {/* Header da categoria */}
-        <header className="mb-8 pb-6 border-b border-border">
-          <h1 className="text-3xl font-bold text-foreground">{category.name}</h1>
-          {category.description && (
-            <p className="text-muted-foreground mt-2 max-w-2xl leading-relaxed">
-              {category.description}
-            </p>
-          )}
-        </header>
-
-        {/* Produtos */}
         <ProductGrid
           products={products}
           emptyTitle="Nenhum produto nesta categoria"
-          emptyDescription="Esta categoria ainda não possui produtos disponíveis. Explore outras categorias!"
+          emptyDescription="Esta categoria ainda não possui produtos disponíveis. Explore o catálogo completo ou outras categorias."
           action={
-            <Link href="/loja/produtos" className="text-accent hover:underline text-sm font-medium">
-              Ver todos os produtos
+            <Link
+              href="/loja/produtos"
+              className="inline-flex h-10 items-center justify-center rounded-xl bg-accent px-5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-accent-dark"
+            >
+              Explorar catálogo
             </Link>
           }
         />

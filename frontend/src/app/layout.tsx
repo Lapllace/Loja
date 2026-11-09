@@ -32,7 +32,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0b0b0b",
+  themeColor: "#0a1f44",
   width: "device-width",
   initialScale: 1,
 };
@@ -45,7 +45,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 
   return (
         <html lang="pt-BR" className="h-full antialiased">
-      <body className="min-h-full flex flex-col">
+      <body className="flex min-h-full flex-col bg-background text-foreground">
         {/* CartProvider: estado de dados (GET/POST/PATCH/DELETE /cart)
             CartUiProvider: estado de UI da gaveta (aberto/fechado) */}
         {googleClientId ? (

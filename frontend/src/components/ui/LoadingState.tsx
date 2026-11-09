@@ -8,7 +8,7 @@ interface LoadingStateProps {
 export function LoadingState({ message = 'Carregando...', className = '' }: LoadingStateProps) {
   return (
     <div className={`flex flex-col items-center justify-center py-12 ${className}`}>
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      <div className="size-12 animate-spin rounded-full border-b-2 border-accent" aria-hidden="true" />
       <p className="mt-4 text-muted-foreground">{message}</p>
     </div>
   );
@@ -16,11 +16,15 @@ export function LoadingState({ message = 'Carregando...', className = '' }: Load
 
 export function CardSkeleton({ className = '' }: { className?: string }) {
   return (
-    <div className={`animate-pulse ${className}`}>
-      <div className="bg-muted h-48 rounded-lg mb-4"></div>
-      <div className="bg-muted h-4 rounded w-3/4 mb-2"></div>
-      <div className="bg-muted h-4 rounded w-1/2 mb-2"></div>
-      <div className="bg-muted h-6 rounded w-1/3"></div>
+    <div className={`animate-pulse overflow-hidden rounded-2xl border border-border/80 bg-card ${className}`}>
+      <div className="aspect-square bg-muted" />
+      <div className="space-y-3 p-4">
+        <div className="h-2.5 w-20 rounded-full bg-muted" />
+        <div className="h-4 w-4/5 rounded bg-muted" />
+        <div className="h-4 w-1/2 rounded bg-muted" />
+        <div className="h-5 w-24 rounded bg-muted" />
+        <div className="h-10 w-full rounded-xl bg-muted" />
+      </div>
     </div>
   );
 }

@@ -62,70 +62,118 @@ export function ProductActions({ productId, stock }: ProductActionsProps) {
   };
 
   return (
-    <div className="space-y-4 pt-6 border-t border-border">
-      {inStock && (
-        <div className="flex items-center gap-3">
-          <label htmlFor="product-quantity" className="text-sm font-medium text-muted-foreground">
-            Quantidade
-          </label>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              aria-label="Reduzir quantidade"
-              disabled={updating || quantity <= 1}
-              onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-              className="w-9 h-9 inline-flex items-center justify-center rounded-lg border-border font-semibold hover:bg-muted disabled:opacity-50 transition-colors"
+    <div className="mt-7 space-y-4 border-t border-border pt-6">
+      {inStock ? (
+        <div className="grid gap-3 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-start">
+          <div>
+            <label
+              htmlFor="product-quantity"
+              className="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground"
             >
-              −
-            </button>
-            <input
-              id="product-quantity"
-              type="number"
-              min={1}
-              max={max}
-              value={quantity}
-              onChange={(event) => setQuantity(Number(event.target.value) || 1)}
-              onBlur={(event) =>
-                setQuantity(Math.max(1, Math.min(max, Number(event.target.value) || 1)))
-              }
-              disabled={updating}
-              className="w-14 h-9 text-center text-sm font-semibold border-border rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            />
-            <button
-              type="button"
-              aria-label="Aumentar quantidade"
-              disabled={updating || quantity >= max}
-              onClick={() => setQuantity((q) => Math.min(max, q + 1))}
-              className="w-9 h-9 inline-flex items-center justify-center rounded-lg border-border font-semibold hover:bg-muted disabled:opacity-50 transition-colors"
-            >
-              +
-            </button>
+              Quantidade
+            </label>
+
+            <div className="inline-flex h-12 items-center overflow-hidden rounded-xl border border-input bg-card">
+              <button
+                type="button"
+                aria-label="Reduzir quantidade"
+                disabled={updating || quantity <= 1}
+                onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                className="inline-flex h-full w-11 items-center justify-center text-lg font-semibold text-foreground transition-colors hover:bg-muted disabled:opacity-40"
+              >
+                −
+              </button>
+              <input
+                id="product-quantity"
+                type="number"
+                min={1}
+                max={max}
+                value={quantity}
+                onChange={(event) => setQuantity(Number(event.target.value) || 1)}
+                onBlur={(event) =>
+                  setQuantity(Math.max(1, Math.min(max, Number(event.target.value) || 1)))
+                }
+                disabled={updating}
+                className="h-full w-14 border-x border-input bg-transparent text-center text-sm font-semibold text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40"
+              />
+              <button
+                type="button"
+                aria-label="Aumentar quantidade"
+                disabled={updating || quantity >= max}
+                onClick={() => setQuantity((q) => Math.min(max, q + 1))}
+                className="inline-flex h-full w-11 items-center justify-center text-lg font-semibold text-foreground transition-colors hover:bg-muted disabled:opacity-40"
+              >
+                +
+              </button>
+            </div>
+
+            {available <= 0 && (
+              <p className="mt-2 text-xs font-medium text-warning">
+                Estoque máximo já está no carrinho.
+              </p>
+            )}
           </div>
-          {available <= 0 && (
-            <span className="text-xs text-warning ml-auto">Estoque máximo no carrinho</span>
-          )}
+
+          <div className="flex flex-col gap-2 sm:pt-[26px]">
+            <Button
+              variant="primary"
+              size="lg"
+              className="h-12 w-full"
+              onClick={() => void handleAddToCart()}
+              disabled={!canAdd}
+              title={
+                !inStock
+                  ? 'Produto esgotado'
+                  : available <= 0
+                    ? 'Você já tem o estoque disponível no carrinho'
+                    : undefined
+              }
+            >
+              <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.8}
+                  d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.014 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z"
+                />
+              </svg>
+              {updating ? 'Adicionando...' : 'Adicionar ao carrinho'}
+            </Button>
+
+            <Button variant="outline" size="md" className="h-11 w-full" onClick={handleShare}>
+              <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.7}
+                  d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z"
+                />
+              </svg>
+              Compartilhar
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <Button variant="secondary" size="lg" className="h-12 w-full" disabled>
+            Produto esgotado
+          </Button>
+          <Button variant="outline" size="md" className="h-11 w-full" onClick={handleShare}>
+            <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.7}
+                d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z"
+              />
+            </svg>
+            Compartilhar
+          </Button>
         </div>
       )}
 
-      <Button
-        variant="primary"
-        size="lg"
-        className="w-full"
-        onClick={() => void handleAddToCart()}
-        disabled={!canAdd}
-        title={
-          !inStock
-            ? 'Produto esgotado'
-            : available <= 0
-              ? 'Você já tem o estoque disponível no carrinho'
-              : undefined
-        }
-      >
-        {!inStock ? 'Produto esgotado' : updating ? 'Adicionando...' : 'Adicionar ao carrinho'}
-      </Button>
-
       {!isAuthenticated && (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs leading-relaxed text-muted-foreground">
           Você está comprando como visitante.{' '}
           <Link href="/login" className="font-semibold text-accent hover:underline">
             Entre na conta
@@ -143,15 +191,22 @@ export function ProductActions({ productId, stock }: ProductActionsProps) {
       {feedback && (
         <p
           role="status"
-          className={`text-sm font-medium ${feedback.type === 'success' ? 'text-success' : 'text-error'}`}
+          className={`flex items-center gap-2 text-sm font-medium ${
+            feedback.type === 'success' ? 'text-success' : 'text-error'
+          }`}
         >
+          {feedback.type === 'success' ? (
+            <svg className="size-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
+          ) : (
+            <svg className="size-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m0 3.75h.008v.008H12v-.008z" />
+            </svg>
+          )}
           {feedback.message}
         </p>
       )}
-
-      <Button variant="outline" size="lg" className="w-full" onClick={handleShare}>
-        Compartilhar
-      </Button>
     </div>
   );
 }

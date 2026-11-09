@@ -2,74 +2,83 @@
 
 /*
  * TOKENS DA IDENTIDADE VISUAL — Gil Imports
- * Paleta oficial (branding/COLORS.md): preto, dourado, branco, cinzas.
- * Para customizar a loja, altere apenas as variáveis abaixo.
+ * Direção atual: superfícies claras, azul profundo e azul elétrico.
+ * A paleta preto/dourado anterior foi substituída apenas nos tokens; a marca,
+ * as rotas e todos os dados continuam os mesmos.
  */
 :root {
   /* Marca */
-  --ink: #0b0b0b;            /* Preto principal (navbar, rodapé, hero) */
-  --ink-dark: #060606;
-  --accent: #c9a227;         /* Dourado (botões, links, detalhes) */
-  --accent-dark: #a8871f;
+  --ink: #0a1f44;            /* Azul profundo (navbar, rodapé, hero) */
+  --ink-dark: #06152f;
+  --accent: #1d4ed8;         /* Azul elétrico (ações e links) */
+  --accent-dark: #1e3a8a;
+  --accent-bright: #3b82f6;  /* Azul claro para gradientes e detalhes */
+  --accent-soft: #e8f0ff;    /* Fundo azulado suave */
 
-  /* Texto sobre dourado */
-  --primary-contrast: #0b0b0b;
+  /* Texto sobre azul */
+  --primary-contrast: #ffffff;
 
-  /* Cores neutras (paleta oficial) */
-  --background: #ffffff;
-  --foreground: #0f0f0f;
-  --muted: #f5f5f5;          /* Cinza claro */
-  --muted-foreground: #a0a0a0; /* Cinza médio */
-  --secondary: #303030;      /* Cinza escuro */
-  --border: #e2e2e2;
+  /* Cores neutras */
+  --background: #f7f9fd;     /* Off-white azulado */
+  --foreground: #0b1b33;
+  --muted: #eef3fa;          /* Cinza-azulado claro */
+  --muted-foreground: #5a6b85;
+  --secondary: #24406c;
+  --border: #dde6f2;
 
   /* --- Fundação visual (Design System) --- */
   --card: #ffffff;
-  --card-foreground: #0f0f0f;
+  --card-foreground: #0b1b33;
   --popover: #ffffff;
-  --popover-foreground: #0f0f0f;
-  /* Bordas de controles de formulário (levemente mais escuras que --border) */
-  --input: #d4d4d4;
-  /* Cor do anel de foco: dourado suave para halo elegante */
-  --ring: #c9a227;
+  --popover-foreground: #0b1b33;
+  --input: #c9d6e8;
+  --ring: #1d4ed8;
 
-  /* Escala de raio única (base 0.75rem) — mantém tudo coeso */
-  --radius: 0.75rem;
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
+  /* Escala de raio — superfícies modernas e consistentes */
+  --radius: 0.875rem;
+  --radius-sm: calc(var(--radius) * 0.55);
+  --radius-md: calc(var(--radius) * 0.75);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-xl: calc(var(--radius) * 1.35);
+  --radius-2xl: calc(var(--radius) * 1.75);
 
   /* Compatibilidade (referências antigas) */
-  --primary: #0b0b0b;
-  --primary-dark: #060606;
-  --primary-light: #303030;
-  --secondary-dark: #1a1a1a;
-  --secondary-light: #4a4a4a;
+  --primary: #0a1f44;
+  --primary-dark: #06152f;
+  --primary-light: #24406c;
+  --secondary-dark: #142c52;
+  --secondary-light: #4a6488;
 
   /* Cores de status */
-  --success: #1f8f4e;
-  --warning: #c9a227;
-  --error: #d64545;
+  --success: #12805c;
+  --warning: #b45309;
+  --error: #dc2626;
 
-  /* Tipografia (BRAND_GUIDE: Inter/Poppins/Manrope — system stack customizável) */
+  /* Tipografia — system stack, sem dependência externa */
   --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
 .dark {
-  --background: #111111;
-  --foreground: #f5f5f5;
-  --muted: #1d1d1d;
-  --muted-foreground: #a7a7a7;
-  --secondary: #d4d4d4;
-  --border: #303030;
-  --card: #181818;
-  --card-foreground: #f5f5f5;
-  --popover: #181818;
-  --popover-foreground: #f5f5f5;
-  --input: #414141;
-  --ring: #d8b43a;
+  --background: #071326;
+  --foreground: #edf3ff;
+  --muted: #0e2038;
+  --muted-foreground: #9fb2cc;
+  --secondary: #c9d6ea;
+  --border: #1d3350;
+  --card: #0b1b30;
+  --card-foreground: #edf3ff;
+  --popover: #0b1b30;
+  --popover-foreground: #edf3ff;
+  --input: #29425f;
+  --ring: #60a5fa;
+  --accent: #2563eb;
+  --accent-dark: #1d4ed8;
+  --accent-bright: #60a5fa;
+  --accent-soft: #12294a;
+  --primary: #edf3ff;
+  --primary-dark: #c9d6ea;
+  --primary-light: #9fb2cc;
+  --primary-contrast: #ffffff;
 }
 
 @theme inline {
@@ -77,6 +86,8 @@
   --color-ink-dark: var(--ink-dark);
   --color-accent: var(--accent);
   --color-accent-dark: var(--accent-dark);
+  --color-accent-bright: var(--accent-bright);
+  --color-accent-soft: var(--accent-soft);
   --color-primary-contrast: var(--primary-contrast);
   --color-primary: var(--primary);
   --color-primary-dark: var(--primary-dark);
@@ -106,13 +117,23 @@
   --radius-2xl: var(--radius-2xl);
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
   line-height: 1.6;
+  text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: var(--accent);
+  color: #ffffff;
 }
 
 /*
@@ -124,9 +145,10 @@ h1,
 h2,
 h3,
 h4 {
-  line-height: 1.2;
-  letter-spacing: -0.02em;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
   font-weight: 700;
+  text-wrap: balance;
 }
 
 h5,
@@ -156,5 +178,34 @@ h6 {
   .cart-count {
     @apply inline-flex min-w-[1.25rem] h-5 px-1 items-center justify-center rounded-full text-[10px] font-bold leading-none;
   }
+
+  /* Navegação horizontal sem barra de rolagem visível */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Compatibilidade: botões legados usam bg-accent + text-ink.
+     Com o novo azul elétrico, o contraste correto é texto branco. */
+  .bg-accent.text-ink {
+    color: #ffffff;
+  }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

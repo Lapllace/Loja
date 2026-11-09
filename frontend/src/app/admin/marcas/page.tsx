@@ -5,14 +5,24 @@
  * Reutiliza exatamente os endpoints existentes:
  *   GET/POST /brands, PATCH/DELETE /brands/:id
  * O backend recusa exclusão de marca com produtos vinculados (409).
+ * A contagem de produtos é calculada no cliente a partir de GET /products,
+ * pois o endpoint de marcas não devolve contadores.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { api } from '@/lib/api';
 import { LoadingState } from '@/components/ui/LoadingState';
-import type { Brand } from '@/lib/types';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { inputClassName } from '@/components/ui/Input';
+import { AdminPageHeader } from '@/components/admin/AdminPageHeader';
+import { AdminStatCard, AdminStatGrid } from '@/components/admin/AdminStatCard';
+import { AdminFormSection } from '@/components/admin/AdminFormSection';
+import { FeedbackBanner, type FeedbackTone } from '@/components/admin/FeedbackBanner';
+import { StatusBadge } from '@/components/admin/StatusBadge';
+import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
+import type { Brand, Product } from '@/lib/types';
 
 interface FormState {
   name: string;
@@ -22,7 +32,14 @@ interface FormState {
   active: boolean;
 }
 
+interface FeedbackState {
+  tone: FeedbackTone;
+  message: string;
+}
+
 const EMPTY_FORM: FormState = { name: '', slug: '', description: '', website: '', active: true };
+
+type StatusFilter = 'all' | 'active' | 'inactive';
 
 function slugify(value: string): string {
   return value
@@ -34,27 +51,44 @@ function slugify(value: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
+const labelClassName = 'mb-1 block text-sm font-medium text-foreground';
+
 export default function AdminBrandsPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'OWNER';
 
   const [brands, setBrands] = useState<Brand[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const [feedback, setFeedback] = useState<FeedbackState | null>(null);
+
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+
   const [deleteTarget, setDeleteTarget] = useState<Brand | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Ações em lote (sem endpoint bulk no backend: percorremos os IDs
   // selecionados com os endpoints PATCH/DELETE existentes).
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
   const load = useCallback(async () => {
-    const data = await api.getBrands({ next: { revalidate: 0 } });
-    setBrands(data);
+    setLoading(true);
+    const [brandData, productData] = await Promise.all([
+      api.getBrands({ next: { revalidate: 0 } }),
+      api.getProducts(undefined, undefined, { next: { revalidate: 0 } }),
+    ]);
+    setBrands(brandData);
+    setProducts(productData);
     // A lista foi refeita: manter seleção de itens que não existem mais confunde.
     setSelectedIds(new Set());
     setLoading(false);
@@ -62,18 +96,76 @@ export default function AdminBrandsPage() {
 
   useEffect(() => {
     if (!isAdmin) return;
-    const t = setTimeout(() => void load(), 0);
-    return () => clearTimeout(t);
-  }, [isAdmin, load]);
+    let active = true;
+    void Promise.all([
+      api.getBrands({ next: { revalidate: 0 } }),
+      api.getProducts(undefined, undefined, { next: { revalidate: 0 } }),
+    ]).then(([brandData, productData]) => {
+      if (!active) return;
+      setBrands(brandData);
+      setProducts(productData);
+      setLoading(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [isAdmin]);
+
+  const productCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const product of products) {
+      if (!product.brandId) continue;
+      map.set(product.brandId, (map.get(product.brandId) ?? 0) + 1);
+    }
+    return map;
+  }, [products]);
+
+  const stats = useMemo(() => {
+    const total = brands.length;
+    const active = brands.filter((brand) => brand.active).length;
+    const withProducts = brands.filter((brand) => (productCounts.get(brand.id) ?? 0) > 0).length;
+    return { total, active, inactive: total - active, withProducts, withoutProducts: total - withProducts };
+  }, [brands, productCounts]);
+
+  const hasFilters = search.trim() !== '' || statusFilter !== 'all';
+
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return brands
+      .filter((brand) => {
+        if (statusFilter === 'active' && !brand.active) return false;
+        if (statusFilter === 'inactive' && brand.active) return false;
+        if (term) {
+          const haystack =
+            `${brand.name} ${brand.slug} ${brand.description ?? ''} ${brand.website ?? ''}`.toLowerCase();
+          if (!haystack.includes(term)) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  }, [brands, search, statusFilter]);
+
+  const allSelected = filtered.length > 0 && filtered.every((brand) => selectedIds.has(brand.id));
+
+  const clearFilters = () => {
+    setSearch('');
+    setStatusFilter('all');
+  };
+
+  const resetForm = () => {
+    setEditingId(null);
+    setForm(EMPTY_FORM);
+    setFormError(null);
+  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setError(null);
-    setNotice(null);
+    setFormError(null);
+    setFeedback(null);
 
     const name = form.name.trim();
     if (!name) {
-      setError('Informe o nome da marca.');
+      setFormError('Informe o nome da marca.');
       return;
     }
     const slug = form.slug.trim() || slugify(name);
@@ -97,15 +189,20 @@ export default function AdminBrandsPage() {
     setSaving(false);
 
     if (!result.ok) {
-      setError(
+      setFormError(
         result.status === 409
           ? 'Já existe marca com este nome ou slug.'
-          : 'Não foi possível salvar a marca.',
+          : result.status === 403
+            ? 'Sua conta não tem permissão para alterar marcas.'
+            : 'Não foi possível salvar a marca.',
       );
       return;
     }
 
-    setNotice(editingId ? 'Marca atualizada.' : 'Marca criada.');
+    setFeedback({
+      tone: 'success',
+      message: editingId ? `Marca “${name}” atualizada.` : `Marca “${name}” criada.`,
+    });
     setForm(EMPTY_FORM);
     setEditingId(null);
     void load();
@@ -120,24 +217,31 @@ export default function AdminBrandsPage() {
       website: brand.website ?? '',
       active: brand.active,
     });
-    setError(null);
-    setNotice(null);
+    setFormError(null);
+    setFeedback(null);
   };
 
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return;
+    setDeleteBusy(true);
+    setDeleteError(null);
+
     const result = await api.deleteBrand(deleteTarget.id);
+    setDeleteBusy(false);
+
     if (!result.ok) {
-      setError(
+      setDeleteError(
         result.status === 409
-          ? 'Marca possui produtos vinculados — exclusão bloqueada pelo backend.'
-          : 'Não foi possível excluir a marca.',
+          ? 'Marca possui produtos vinculados — exclusão bloqueada pelo backend para preservar o catálogo.'
+          : result.status === 404
+            ? 'Marca não encontrada (pode já ter sido removida).'
+            : 'Não foi possível excluir a marca.',
       );
-      setDeleteTarget(null);
       return;
     }
+
+    setFeedback({ tone: 'success', message: `Marca “${deleteTarget.name}” removida.` });
     setDeleteTarget(null);
-    setNotice('Marca removida.');
     void load();
   };
 
@@ -150,18 +254,15 @@ export default function AdminBrandsPage() {
     });
   };
 
-  const allSelected = brands.length > 0 && selectedIds.size === brands.length;
-
   const toggleSelectAll = (checked: boolean) => {
-    setSelectedIds(checked ? new Set(brands.map((brand) => brand.id)) : new Set());
+    setSelectedIds(checked ? new Set(filtered.map((brand) => brand.id)) : new Set());
   };
 
   /** Ativa/desativa em lote reutilizando PATCH /brands/:id. */
   const handleBulkActive = async (active: boolean) => {
     if (selectedIds.size === 0) return;
     setBulkBusy(true);
-    setError(null);
-    setNotice(null);
+    setFeedback(null);
 
     let successCount = 0;
     let failCount = 0;
@@ -182,23 +283,19 @@ export default function AdminBrandsPage() {
     setBulkBusy(false);
     setSelectedIds(new Set());
     await load();
-    setNotice(
-      `${successCount} marca(s) ${active ? 'ativada(s)' : 'inativada(s)'}.` +
-        (failCount > 0 ? ` ${failCount} falharam.` : ''),
-    );
+    setFeedback({
+      tone: failCount > 0 ? 'warning' : 'success',
+      message:
+        `${successCount} marca(s) ${active ? 'ativada(s)' : 'inativada(s)'}.` +
+        (failCount > 0 ? ` ${failCount} falhou(aram).` : ''),
+    });
   };
 
   /** Exclui em lote; o backend bloqueia (409) marcas com produtos vinculados. */
   const handleBulkDelete = async () => {
     if (selectedIds.size === 0) return;
-    const confirmed = window.confirm(
-      `Excluir ${selectedIds.size} marca(s)? Marcas com produtos vinculados serão preservadas.`,
-    );
-    if (!confirmed) return;
-
     setBulkBusy(true);
-    setError(null);
-    setNotice(null);
+    setFeedback(null);
 
     let successCount = 0;
     let failCount = 0;
@@ -210,27 +307,56 @@ export default function AdminBrandsPage() {
     }
 
     setBulkBusy(false);
+    setBulkDeleteOpen(false);
     setSelectedIds(new Set());
     await load();
-    setNotice(`${successCount} marca(s) excluída(s).`);
-    if (failCount > 0) {
-      setError(
-        `${failCount} marca(s) não puderam ser excluídas (possuem produtos vinculados).`,
-      );
-    }
+    setFeedback({
+      tone: failCount > 0 ? 'warning' : 'success',
+      message:
+        `${successCount} marca(s) excluída(s).` +
+        (failCount > 0
+          ? ` ${failCount} não pôde(ram) ser excluída(s) por ter produtos vinculados.`
+          : ''),
+    });
   };
 
   if (!isAdmin) return null;
 
   return (
     <div>
-      <p className="text-sm font-semibold uppercase tracking-[0.16em] text-accent">Catálogo</p>
-      <h1 className="mt-2 text-3xl font-bold text-foreground">Marcas</h1>
-      <p className="mt-2 text-muted-foreground">Gerencie as marcas dos produtos.</p>
+      <AdminPageHeader
+        backHref="/admin/dashboard"
+        eyebrow="Catálogo"
+        title="Marcas"
+        description="Gerencie as marcas dos produtos, acompanhe os vínculos e mantenha os filtros do catálogo confiáveis."
+        count={loading ? undefined : stats.total}
+        countLabel={stats.total === 1 ? 'marca' : 'marcas'}
+      />
 
-      {/* Ações em lote */}
+      <AdminStatGrid>
+        <AdminStatCard label="Total de marcas" value={stats.total} hint="Cadastradas no catálogo" />
+        <AdminStatCard label="Ativas" value={stats.active} hint="Visíveis na loja" tone="success" />
+        <AdminStatCard label="Inativas" value={stats.inactive} hint="Ocultas na loja" />
+        <AdminStatCard
+          label="Com produtos"
+          value={stats.withProducts}
+          hint={`${stats.withoutProducts} sem produtos vinculados`}
+          tone="accent"
+        />
+      </AdminStatGrid>
+
+      {feedback && (
+        <FeedbackBanner
+          tone={feedback.tone}
+          className="mt-5"
+          onDismiss={() => setFeedback(null)}
+        >
+          {feedback.message}
+        </FeedbackBanner>
+      )}
+
       {selectedIds.size > 0 && (
-        <div className="mt-6 rounded-xl border-border bg-accent/10 p-4">
+        <div className="mt-5 rounded-2xl border border-accent/30 bg-accent-soft p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <span className="text-sm font-semibold text-foreground">
               {selectedIds.size} marca(s) selecionada(s)
@@ -240,7 +366,7 @@ export default function AdminBrandsPage() {
                 type="button"
                 onClick={() => void handleBulkActive(true)}
                 disabled={bulkBusy}
-                className="rounded-lg border-border bg-background px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-60"
+                className="rounded-lg border border-border bg-background px-3.5 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted disabled:opacity-60"
               >
                 Ativar
               </button>
@@ -248,23 +374,23 @@ export default function AdminBrandsPage() {
                 type="button"
                 onClick={() => void handleBulkActive(false)}
                 disabled={bulkBusy}
-                className="rounded-lg border-border bg-background px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-60"
+                className="rounded-lg border border-border bg-background px-3.5 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted disabled:opacity-60"
               >
                 Desativar
               </button>
               <button
                 type="button"
-                onClick={() => void handleBulkDelete()}
+                onClick={() => setBulkDeleteOpen(true)}
                 disabled={bulkBusy}
-                className="rounded-lg bg-error px-4 py-2 text-sm font-semibold text-white hover:bg-error/90 disabled:opacity-60"
+                className="rounded-lg bg-error px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-error/90 disabled:opacity-60"
               >
-                {bulkBusy ? 'Processando...' : 'Excluir selecionadas'}
+                Excluir selecionadas
               </button>
               <button
                 type="button"
                 onClick={() => setSelectedIds(new Set())}
                 disabled={bulkBusy}
-                className="rounded-lg border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-60"
+                className="rounded-lg px-3.5 py-2 text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-60"
               >
                 Limpar seleção
               </button>
@@ -273,199 +399,441 @@ export default function AdminBrandsPage() {
         </div>
       )}
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-[380px_1fr]">
-        <form onSubmit={handleSubmit} className="h-fit rounded-xl border-border bg-card p-5">
-          <h2 className="text-lg font-bold text-foreground">
-            {editingId ? 'Editar marca' : 'Nova marca'}
-          </h2>
-          <div className="mt-4 space-y-3">
-            <input
-              value={form.name}
-              onChange={(e) =>
-                setForm((prev) => ({
-                  ...prev,
-                  name: e.target.value,
-                  slug: editingId ? prev.slug : slugify(e.target.value),
-                }))
-              }
-              placeholder="Nome"
-              className="w-full rounded-lg border-input bg-background px-3 py-2 text-sm text-foreground"
-            />
-            <input
-              value={form.slug}
-              onChange={(e) => setForm((prev) => ({ ...prev, slug: e.target.value }))}
-              placeholder="Slug"
-              className="w-full rounded-lg border-input bg-background px-3 py-2 text-sm text-foreground"
-            />
-            <textarea
-              value={form.description}
-              onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
-              placeholder="Descrição (opcional)"
-              rows={3}
-              className="w-full rounded-lg border-input bg-background px-3 py-2 text-sm text-foreground"
-            />
-            <input
-              value={form.website}
-              onChange={(e) => setForm((prev) => ({ ...prev, website: e.target.value }))}
-              placeholder="Website (opcional)"
-              className="w-full rounded-lg border-input bg-background px-3 py-2 text-sm text-foreground"
-            />
-            <label className="flex items-center gap-2 text-sm text-foreground">
-              <input
-                type="checkbox"
-                checked={form.active}
-                onChange={(e) => setForm((prev) => ({ ...prev, active: e.target.checked }))}
-              />
-              Ativa
-            </label>
-          </div>
+      <div className="mt-5 grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
+        {/* Formulário */}
+        <form onSubmit={handleSubmit} className="h-fit lg:sticky lg:top-6">
+          <AdminFormSection
+            title={editingId ? 'Editar marca' : 'Nova marca'}
+            description={
+              editingId
+                ? 'Altere os dados e salve. Nome e slug precisam ser únicos.'
+                : 'Cadastre uma marca para vincular aos produtos.'
+            }
+          >
+            <div className="space-y-3">
+              <div>
+                <label htmlFor="brand-name" className={labelClassName}>
+                  Nome *
+                </label>
+                <input
+                  id="brand-name"
+                  value={form.name}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      name: event.target.value,
+                      slug: editingId ? prev.slug : slugify(event.target.value),
+                    }))
+                  }
+                  placeholder="Ex.: Lattafa"
+                  className={inputClassName}
+                  required
+                />
+              </div>
 
-          {error && (
-            <div role="alert" className="mt-4 rounded-lg border-error/30 bg-error/10 px-3 py-2 text-sm text-error">
-              {error}
-            </div>
-          )}
-          {notice && (
-            <div className="mt-4 rounded-lg border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
-              {notice}
-            </div>
-          )}
+              <div>
+                <label htmlFor="brand-slug" className={labelClassName}>
+                  Slug
+                </label>
+                <input
+                  id="brand-slug"
+                  value={form.slug}
+                  onChange={(event) => setForm((prev) => ({ ...prev, slug: event.target.value }))}
+                  placeholder="Gerado a partir do nome"
+                  className={inputClassName}
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Endereço da marca na loja. Deixe em branco para gerar automaticamente.
+                </p>
+              </div>
 
-          <div className="mt-5 flex gap-3">
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-ink hover:bg-accent-dark disabled:opacity-60"
-            >
-              {saving ? 'Salvando...' : editingId ? 'Salvar' : 'Criar'}
-            </button>
-            {editingId && (
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingId(null);
-                  setForm(EMPTY_FORM);
-                }}
-                className="rounded-lg border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted"
-              >
-                Cancelar
-              </button>
+              <div>
+                <label htmlFor="brand-description" className={labelClassName}>
+                  Descrição
+                </label>
+                <textarea
+                  id="brand-description"
+                  value={form.description}
+                  onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
+                  placeholder="Descrição opcional"
+                  rows={3}
+                  className={inputClassName}
+                />
+              </div>
+
+              <div>
+                <label htmlFor="brand-website" className={labelClassName}>
+                  Website
+                </label>
+                <input
+                  id="brand-website"
+                  type="url"
+                  value={form.website}
+                  onChange={(event) => setForm((prev) => ({ ...prev, website: event.target.value }))}
+                  placeholder="https://exemplo.com"
+                  className={inputClassName}
+                />
+                <p className="mt-1 text-xs text-muted-foreground">Opcional.</p>
+              </div>
+
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-background p-3">
+                <input
+                  type="checkbox"
+                  checked={form.active}
+                  onChange={(event) => setForm((prev) => ({ ...prev, active: event.target.checked }))}
+                  className="mt-0.5 rounded border-input"
+                />
+                <span>
+                  <span className="block text-sm font-semibold text-foreground">Marca ativa</span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    Quando desmarcada, a marca não aparece na loja.
+                  </span>
+                </span>
+              </label>
+            </div>
+
+            {formError && (
+              <FeedbackBanner tone="error" className="mt-4">
+                {formError}
+              </FeedbackBanner>
             )}
-          </div>
+
+            <div className="mt-5 flex flex-wrap gap-3">
+              <button
+                type="submit"
+                disabled={saving}
+                className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-dark disabled:opacity-60"
+              >
+                {saving ? 'Salvando...' : editingId ? 'Salvar alterações' : 'Criar marca'}
+              </button>
+              {editingId && (
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  disabled={saving}
+                  className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted disabled:opacity-60"
+                >
+                  Cancelar edição
+                </button>
+              )}
+            </div>
+          </AdminFormSection>
         </form>
 
-        <div>
+        {/* Listagem */}
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_180px]">
+              <div className="relative">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                  <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-4.35-4.35M17 10.5a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0Z" />
+                  </svg>
+                </span>
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Buscar por nome, slug, descrição ou website"
+                  aria-label="Buscar marcas"
+                  className={`${inputClassName} pl-9`}
+                />
+              </div>
+
+              <select
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
+                className={inputClassName}
+                aria-label="Filtrar por situação"
+              >
+                <option value="all">Todas as situações</option>
+                <option value="active">Ativas</option>
+                <option value="inactive">Inativas</option>
+              </select>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-sm">
+              <p className="text-muted-foreground">
+                {loading ? (
+                  'Carregando marcas...'
+                ) : (
+                  <>
+                    <span className="font-semibold text-foreground">{filtered.length}</span>{' '}
+                    {filtered.length === 1 ? 'marca encontrada' : 'marcas encontradas'}
+                    {hasFilters && ` de ${stats.total}`}
+                  </>
+                )}
+              </p>
+              {hasFilters && (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="text-xs font-semibold text-accent transition-colors hover:text-accent-dark hover:underline"
+                >
+                  Limpar filtros
+                </button>
+              )}
+            </div>
+          </div>
+
           {loading ? (
-            <LoadingState message="Carregando marcas..." className="min-h-[200px]" />
-          ) : brands.length === 0 ? (
-            <div className="rounded-xl border-border bg-muted/30 p-8 text-center text-muted-foreground">
-              Nenhuma marca cadastrada.
+            <div className="overflow-hidden rounded-2xl border border-border bg-card">
+              <LoadingState message="Carregando marcas..." className="min-h-[220px]" />
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="rounded-2xl border border-border bg-card p-6">
+              <EmptyState
+                title={brands.length === 0 ? 'Nenhuma marca cadastrada' : 'Nenhuma marca encontrada'}
+                description={
+                  brands.length === 0
+                    ? 'Crie a primeira marca no formulário ao lado.'
+                    : 'Tente ajustar a busca ou o filtro de situação.'
+                }
+                action={
+                  brands.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={clearFilters}
+                      className="rounded-lg border border-input bg-background px-5 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+                    >
+                      Limpar filtros
+                    </button>
+                  ) : undefined
+                }
+              />
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-xl border-border">
-              <table className="w-full text-sm">
-                <thead className="border-b border-border bg-muted/50">
-                  <tr>
-                    <th className="w-10 px-4 py-3 text-left">
-                      <input
-                        type="checkbox"
-                        checked={allSelected}
-                        onChange={(e) => toggleSelectAll(e.target.checked)}
-                        aria-label="Selecionar todas as marcas"
-                        className="rounded border-input"
-                      />
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-foreground">Nome</th>
-                    <th className="px-4 py-3 text-left font-semibold text-foreground">Slug</th>
-                    <th className="px-4 py-3 text-left font-semibold text-foreground">Status</th>
-                    <th className="px-4 py-3 text-right font-semibold text-foreground">Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {brands.map((brand) => (
-                    <tr key={brand.id} className="border-b border-border">
-                      <td className="px-4 py-3">
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.has(brand.id)}
-                          onChange={(e) => toggleSelected(brand.id, e.target.checked)}
-                          aria-label={`Selecionar ${brand.name}`}
-                          className="rounded border-input"
-                        />
-                      </td>
-                      <td className="px-4 py-3 text-foreground">{brand.name}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{brand.slug}</td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
-                            brand.active
-                              ? 'bg-success/10 text-success'
-                              : 'bg-muted text-muted-foreground'
+            <>
+              {/* Tabela (md+) */}
+              <div className="hidden overflow-hidden rounded-2xl border border-border bg-card shadow-sm md:block">
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[780px] text-sm">
+                    <thead className="border-b border-border bg-muted/50 text-left">
+                      <tr>
+                        <th className="w-10 px-3 py-3">
+                          <input
+                            type="checkbox"
+                            checked={allSelected}
+                            onChange={(event) => toggleSelectAll(event.target.checked)}
+                            aria-label="Selecionar todas as marcas visíveis"
+                            className="rounded border-input"
+                          />
+                        </th>
+                        <th className="px-3 py-3 font-semibold text-foreground">Nome</th>
+                        <th className="px-3 py-3 font-semibold text-foreground">Slug</th>
+                        <th className="px-3 py-3 font-semibold text-foreground">Produtos</th>
+                        <th className="hidden px-3 py-3 font-semibold text-foreground xl:table-cell">
+                          Website
+                        </th>
+                        <th className="px-3 py-3 font-semibold text-foreground">Status</th>
+                        <th className="px-3 py-3 text-right font-semibold text-foreground">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.map((brand) => (
+                        <tr
+                          key={brand.id}
+                          className={`border-b border-border transition-colors last:border-b-0 hover:bg-muted/30 ${
+                            selectedIds.has(brand.id) ? 'bg-accent-soft/60' : ''
                           }`}
                         >
-                          {brand.active ? 'Ativa' : 'Inativa'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex justify-end gap-2">
+                          <td className="px-3 py-3 align-top">
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.has(brand.id)}
+                              onChange={(event) => toggleSelected(brand.id, event.target.checked)}
+                              aria-label={`Selecionar ${brand.name}`}
+                              className="mt-1 rounded border-input"
+                            />
+                          </td>
+                          <td className="px-3 py-3">
+                            <p className="font-medium text-foreground">{brand.name}</p>
+                            {brand.description && (
+                              <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
+                                {brand.description}
+                              </p>
+                            )}
+                          </td>
+                          <td className="px-3 py-3 font-mono text-xs text-muted-foreground">
+                            {brand.slug}
+                          </td>
+                          <td className="px-3 py-3 font-medium text-foreground">
+                            {productCounts.get(brand.id) ?? 0}
+                          </td>
+                          <td className="hidden max-w-[220px] truncate px-3 py-3 text-xs xl:table-cell">
+                            {brand.website ? (
+                              <a
+                                href={brand.website}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-accent hover:underline"
+                              >
+                                {brand.website}
+                              </a>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-3">
+                            <StatusBadge tone={brand.active ? 'success' : 'muted'}>
+                              {brand.active ? 'Ativa' : 'Inativa'}
+                            </StatusBadge>
+                          </td>
+                          <td className="px-3 py-3">
+                            <div className="flex justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => startEdit(brand)}
+                                className="rounded-lg border border-border px-2.5 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
+                              >
+                                Editar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setDeleteTarget(brand);
+                                  setDeleteError(null);
+                                }}
+                                className="rounded-lg bg-error/10 px-2.5 py-1.5 text-xs font-semibold text-error transition-colors hover:bg-error/20"
+                              >
+                                Excluir
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Cartões (até md) */}
+              <div className="grid gap-3 md:hidden">
+                {filtered.map((brand) => (
+                  <article
+                    key={brand.id}
+                    className={`rounded-2xl border bg-card p-4 shadow-sm ${
+                      selectedIds.has(brand.id) ? 'border-accent/50' : 'border-border'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(brand.id)}
+                        onChange={(event) => toggleSelected(brand.id, event.target.checked)}
+                        aria-label={`Selecionar ${brand.name}`}
+                        className="mt-1 rounded border-input"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="font-semibold leading-snug text-foreground">{brand.name}</p>
+                            <p className="mt-0.5 break-all font-mono text-xs text-muted-foreground">
+                              {brand.slug}
+                            </p>
+                          </div>
+                          <StatusBadge tone={brand.active ? 'success' : 'muted'}>
+                            {brand.active ? 'Ativa' : 'Inativa'}
+                          </StatusBadge>
+                        </div>
+
+                        <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                          <div>
+                            <dt className="text-muted-foreground">Produtos</dt>
+                            <dd className="mt-0.5 font-medium text-foreground">
+                              {productCounts.get(brand.id) ?? 0}
+                            </dd>
+                          </div>
+                          <div className="min-w-0">
+                            <dt className="text-muted-foreground">Website</dt>
+                            <dd className="mt-0.5 truncate font-medium text-foreground">
+                              {brand.website ?? '—'}
+                            </dd>
+                          </div>
+                        </dl>
+
+                        <div className="mt-3 flex justify-end gap-1.5 border-t border-border pt-3">
                           <button
                             type="button"
                             onClick={() => startEdit(brand)}
-                            className="rounded-lg border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted"
+                            className="rounded-lg border border-border px-2.5 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
                           >
                             Editar
                           </button>
                           <button
                             type="button"
-                            onClick={() => setDeleteTarget(brand)}
-                            className="rounded-lg bg-error/10 px-3 py-1.5 text-xs font-semibold text-error hover:bg-error/20"
+                            onClick={() => {
+                              setDeleteTarget(brand);
+                              setDeleteError(null);
+                            }}
+                            className="rounded-lg bg-error/10 px-2.5 py-1.5 text-xs font-semibold text-error transition-colors hover:bg-error/20"
                           >
                             Excluir
                           </button>
                         </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </>
           )}
         </div>
       </div>
 
-      {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
-          <button
-            type="button"
-            aria-label="Fechar"
-            onClick={() => setDeleteTarget(null)}
-            className="absolute inset-0 bg-black/50"
-          />
-          <div className="relative w-full max-w-md rounded-2xl border-border bg-background p-6 shadow-xl">
-            <h2 className="text-lg font-bold text-foreground">Excluir marca?</h2>
-            <p className="mt-3 text-sm text-muted-foreground">
-              A marca <span className="font-medium text-foreground">{deleteTarget.name}</span> será
-              removida. O backend bloqueia a exclusão se houver produtos vinculados.
-            </p>
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setDeleteTarget(null)}
-                className="rounded-lg border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteConfirm}
-                className="rounded-lg bg-error px-4 py-2 text-sm font-semibold text-white hover:bg-error/90"
-              >
-                Excluir
-              </button>
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Excluir marca?"
+        description={
+          deleteTarget ? (
+            <div className="space-y-3">
+              <dl className="space-y-1 rounded-xl bg-muted/40 p-4 text-sm">
+                <div className="flex justify-between gap-4">
+                  <dt>Nome</dt>
+                  <dd className="text-right font-medium text-foreground">{deleteTarget.name}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt>Slug</dt>
+                  <dd className="text-right font-mono text-xs text-foreground">{deleteTarget.slug}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt>Produtos vinculados</dt>
+                  <dd className="text-right font-medium text-foreground">
+                    {productCounts.get(deleteTarget.id) ?? 0}
+                  </dd>
+                </div>
+              </dl>
+              <p>
+                O backend bloqueia a exclusão se houver produtos vinculados. Nesse caso, a marca é
+                preservada.
+              </p>
             </div>
-          </div>
-        </div>
-      )}
+          ) : null
+        }
+        confirmLabel="Excluir"
+        tone="danger"
+        busy={deleteBusy}
+        error={deleteError}
+        onConfirm={() => void handleDeleteConfirm()}
+        onClose={() => {
+          if (deleteBusy) return;
+          setDeleteTarget(null);
+          setDeleteError(null);
+        }}
+      />
+
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        title={`Excluir ${selectedIds.size} marca(s)?`}
+        description="Marcas com produtos vinculados são preservadas pelo backend e não serão excluídas."
+        confirmLabel="Excluir selecionadas"
+        tone="danger"
+        busy={bulkBusy}
+        onConfirm={() => void handleBulkDelete()}
+        onClose={() => {
+          if (!bulkBusy) setBulkDeleteOpen(false);
+        }}
+      />
     </div>
   );
 }

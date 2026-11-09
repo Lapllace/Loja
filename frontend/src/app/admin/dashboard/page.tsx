@@ -5,7 +5,11 @@ import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { api } from '@/lib/api';
 import { LoadingState } from '@/components/ui/LoadingState';
+import { AdminPageHeader } from '@/components/admin/AdminPageHeader';
+import { AdminStatCard, AdminStatGrid } from '@/components/admin/AdminStatCard';
+import { FeedbackBanner } from '@/components/admin/FeedbackBanner';
 import type { Order } from '@/lib/types';
+import { formatPrice } from '@/lib/utils';
 
 export default function AdminDashboardPage() {
   const { user } = useAuth();
@@ -20,12 +24,14 @@ export default function AdminDashboardPage() {
     totalRevenue: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAdmin) return;
 
     const loadStats = async () => {
       try {
+        setLoadError(null);
         const [products, ordersResult, usersResult] = await Promise.all([
           api.getProducts(undefined, undefined, { next: { revalidate: 0 } }),
           api.getOrders(),
@@ -38,9 +44,11 @@ export default function AdminDashboardPage() {
         const userCount = usersResult.ok ? usersResult.data.length : 0;
 
         const pendingOrders = orderList.filter((o) => o.status === 'PENDING').length;
-        const totalRevenue = orderList
-          .filter((o) => o.status === 'PAID' || o.status === 'DELIVERED')
-          .reduce((sum, order) => sum + Number(order.total), 0);
+        const totalRevenue = user?.role === 'OWNER'
+          ? orderList
+            .filter((o) => o.status === 'PAID' || o.status === 'DELIVERED')
+            .reduce((sum, order) => sum + Number(order.total), 0)
+          : 0;
 
         setStats({
           totalProducts: products.length,
@@ -52,13 +60,14 @@ export default function AdminDashboardPage() {
         });
       } catch (error) {
         console.error('Failed to load stats:', error);
+        setLoadError('Não foi possível carregar os indicadores. Tente novamente.');
       } finally {
         setLoading(false);
       }
     };
 
     loadStats();
-  }, [isAdmin]);
+  }, [isAdmin, user?.role]);
 
   if (!isAdmin) return null;
 
@@ -68,72 +77,89 @@ export default function AdminDashboardPage() {
 
   return (
     <div>
-      <p className="text-sm font-semibold uppercase tracking-[0.16em] text-accent">Painel Administrativo</p>
-      <h1 className="mt-2 text-3xl font-bold text-foreground">Dashboard</h1>
-      <p className="mt-2 text-muted-foreground">Visão geral da loja</p>
+      <AdminPageHeader
+        eyebrow="Painel administrativo"
+        title="Dashboard"
+        description="Acompanhe o catálogo, os pedidos e a operação da loja."
+      />
 
-      <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        <Link
+      {loadError && (
+        <FeedbackBanner tone="error" className="mb-5">
+          {loadError}
+        </FeedbackBanner>
+      )}
+
+      <AdminStatGrid>
+        <AdminStatCard
           href="/admin/produtos"
-          className="rounded-xl border border-border bg-card p-6 shadow-sm hover:border-accent/60 transition"
-        >
-          <p className="text-sm font-medium text-muted-foreground">Produtos</p>
-          <p className="mt-2 text-3xl font-bold text-foreground">{stats.totalProducts}</p>
-          <p className="mt-1 text-sm text-success">{stats.activeProducts} ativos</p>
-        </Link>
-
-        <Link
+          label="Produtos"
+          value={stats.totalProducts}
+          hint={`${stats.activeProducts} ativos`}
+          tone="accent"
+        />
+        <AdminStatCard
           href="/admin/pedidos"
-          className="rounded-xl border border-border bg-card p-6 shadow-sm hover:border-accent/60 transition"
-        >
-          <p className="text-sm font-medium text-muted-foreground">Pedidos</p>
-          <p className="mt-2 text-3xl font-bold text-foreground">{stats.totalOrders}</p>
-          <p className="mt-1 text-sm text-warning">{stats.pendingOrders} pendentes</p>
-        </Link>
-
-        <Link
+          label="Pedidos"
+          value={stats.totalOrders}
+          hint={`${stats.pendingOrders} pendentes`}
+          tone="warning"
+        />
+        <AdminStatCard
           href="/admin/usuarios"
-          className="rounded-xl border border-border bg-card p-6 shadow-sm hover:border-accent/60 transition"
-        >
-          <p className="text-sm font-medium text-muted-foreground">Usuários</p>
-          <p className="mt-2 text-3xl font-bold text-foreground">{stats.totalUsers}</p>
-        </Link>
+          label="Usuários"
+          value={stats.totalUsers}
+          hint="Contas cadastradas"
+        />
+        {user?.role === 'OWNER' && (
+          <AdminStatCard
+            label="Receita total"
+            value={formatPrice(stats.totalRevenue)}
+            hint="Pedidos pagos e entregues"
+            tone="success"
+          />
+        )}
+      </AdminStatGrid>
 
-        <div className="rounded-xl border border-border bg-card p-6 shadow-sm sm:col-span-2 lg:col-span-3">
-          <p className="text-sm font-medium text-muted-foreground">Receita Total</p>
-          <p className="mt-2 text-3xl font-bold text-foreground">
-            R$ {stats.totalRevenue.toFixed(2)}
+      <section className="mt-8 rounded-2xl border border-border bg-card p-5 shadow-sm md:p-6">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">
+            Ações rápidas
           </p>
-          <p className="mt-1 text-sm text-muted-foreground">Pedidos pagos e entregues</p>
+          <h2 className="mt-1 text-xl font-bold text-foreground">Continue de onde parou</h2>
         </div>
-      </div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Link
+            href="/admin/produtos/novo"
+            className="inline-flex min-h-11 items-center justify-center rounded-lg bg-accent px-5 py-3 font-semibold text-white hover:bg-accent-dark"
+          >
+            + Novo Produto
+          </Link>
+          <Link
+            href="/admin/produtos/importar"
+            className="inline-flex justify-center rounded-lg border border-border px-5 py-3 font-semibold text-foreground hover:bg-muted"
+          >
+            Importar Lista
+          </Link>
+          <Link
+            href="/admin/categorias"
+            className="inline-flex justify-center rounded-lg border border-border px-5 py-3 font-semibold text-foreground hover:bg-muted"
+          >
+            Categorias
+          </Link>
+          <Link
+            href="/admin/marcas"
+            className="inline-flex justify-center rounded-lg border border-border px-5 py-3 font-semibold text-foreground hover:bg-muted"
+          >
+            Marcas
+          </Link>
+        </div>
+      </section>
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Link
-          href="/admin/produtos/novo"
-          className="inline-flex justify-center rounded-lg bg-accent px-5 py-3 font-semibold text-ink hover:bg-accent-dark"
-        >
-          + Novo Produto
-        </Link>
-        <Link
-          href="/admin/produtos/importar"
-          className="inline-flex justify-center rounded-lg border border-border px-5 py-3 font-semibold text-foreground hover:bg-muted"
-        >
-          Importar Lista
-        </Link>
-        <Link
-          href="/admin/categorias"
-          className="inline-flex justify-center rounded-lg border border-border px-5 py-3 font-semibold text-foreground hover:bg-muted"
-        >
-          Categorias
-        </Link>
-        <Link
-          href="/admin/marcas"
-          className="inline-flex justify-center rounded-lg border border-border px-5 py-3 font-semibold text-foreground hover:bg-muted"
-        >
-          Marcas
-        </Link>
-      </div>
+      {user?.role !== 'OWNER' && (
+        <p className="mt-4 text-xs text-muted-foreground">
+          Indicadores financeiros ficam disponíveis somente para o proprietário.
+        </p>
+      )}
     </div>
   );
 }

@@ -10,6 +10,11 @@ interface ProductFiltersProps {
   onSortChange: (sort: ProductSort) => void;
   currentFilters: ProductFiltersType;
   currentSort: ProductSort;
+  /** A ordenação pode ser exibida na barra de ferramentas em vez do painel. */
+  showSort?: boolean;
+  /** Permite que a página limpe também filtros vindos da URL. */
+  onClearFilters?: () => void;
+  className?: string;
 }
 
 export function ProductFilters({
@@ -17,17 +22,33 @@ export function ProductFilters({
   onSortChange,
   currentFilters,
   currentSort,
+  showSort = true,
+  onClearFilters,
+  className = '',
 }: ProductFiltersProps) {
-  const { categories } = useCategories();
+  const { categories, loading: categoriesLoading } = useCategories();
   const [priceRange, setPriceRange] = useState({
     min: currentFilters.minPrice?.toString() ?? '',
     max: currentFilters.maxPrice?.toString() ?? '',
   });
 
-  const handleCategoryChange = (categoryId: string) => {
+  // Mantém os campos sincronizados quando a página limpa os filtros.
+  // Ajuste durante a renderização em vez de sincronizar via efeito.
+  const priceSyncKey = `${currentFilters.minPrice ?? ''}|${currentFilters.maxPrice ?? ''}`;
+  const [syncedPriceKey, setSyncedPriceKey] = useState(priceSyncKey);
+
+  if (priceSyncKey !== syncedPriceKey) {
+    setSyncedPriceKey(priceSyncKey);
+    setPriceRange({
+      min: currentFilters.minPrice?.toString() ?? '',
+      max: currentFilters.maxPrice?.toString() ?? '',
+    });
+  }
+
+  const handleCategoryChange = (categoryId?: string) => {
     onFiltersChange({
       ...currentFilters,
-      categoryId: currentFilters.categoryId === categoryId ? undefined : categoryId,
+      categoryId,
     });
   };
 
@@ -41,119 +62,172 @@ export function ProductFilters({
     });
   };
 
-  const handleSortChange = (field: ProductSort['field']) => {
-    const newOrder = currentSort.field === field && currentSort.order === 'asc' ? 'desc' : 'asc';
-    onSortChange({ field, order: newOrder });
-  };
-
   const clearFilters = () => {
+    if (onClearFilters) {
+      onClearFilters();
+      return;
+    }
+
     setPriceRange({ min: '', max: '' });
-    onFiltersChange({
-      search: currentFilters.search,
-    });
+    onFiltersChange({ search: currentFilters.search });
     onSortChange({ field: 'name', order: 'asc' });
   };
 
-  return (
-    <div className="space-y-6">
-      {/* Ordenação */}
-      <div>
-        <h3 className="font-semibold text-foreground mb-3 text-sm uppercase tracking-wide">
-          Ordenar por
-        </h3>
-        <div className="space-y-1.5">
-          {[
-            { field: 'name' as const, label: 'Nome' },
-            { field: 'price' as const, label: 'Preço' },
-            { field: 'createdAt' as const, label: 'Mais recentes' },
-          ].map((option) => (
-            <button
-              key={option.field}
-              onClick={() => handleSortChange(option.field)}
-              className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
-                currentSort.field === option.field
-                  ? 'bg-ink text-accent font-medium'
-                  : 'text-foreground hover:bg-muted'
-              }`}
-            >
-              <span className="flex items-center justify-between">
-                <span>{option.label}</span>
-                {currentSort.field === option.field && (
-                  <span aria-hidden="true">{currentSort.order === 'asc' ? '↑' : '↓'}</span>
-                )}
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
+  const sortValue = `${currentSort.field}-${currentSort.order}`;
 
-      {/* Categorias */}
-      <div>
-        <h3 className="font-semibold text-foreground mb-3 text-sm uppercase tracking-wide">
+  return (
+    <div className={`space-y-6 ${className}`}>
+      {showSort && (
+        <section>
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            Ordenar por
+          </h3>
+          <label htmlFor="filters-sort" className="sr-only">
+            Ordenar produtos
+          </label>
+          <select
+            id="filters-sort"
+            value={sortValue}
+            onChange={(event) => {
+              const [field, order] = event.target.value.split('-') as [
+                ProductSort['field'],
+                ProductSort['order'],
+              ];
+              onSortChange({ field, order });
+            }}
+            className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm font-medium text-foreground transition-colors hover:border-accent/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          >
+            <option value="name-asc">Nome (A–Z)</option>
+            <option value="name-desc">Nome (Z–A)</option>
+            <option value="price-asc">Menor preço</option>
+            <option value="price-desc">Maior preço</option>
+            <option value="createdAt-desc">Mais recentes</option>
+            <option value="createdAt-asc">Mais antigos</option>
+          </select>
+        </section>
+      )}
+
+      <section>
+        <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
           Categorias
         </h3>
-        <div className="space-y-1.5 max-h-64 overflow-y-auto">
-          {categories.map((category) => (
-            <button
-              key={category.id}
-              onClick={() => handleCategoryChange(category.id)}
-              className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
-                currentFilters.categoryId === category.id
-                  ? 'bg-ink text-accent font-medium'
-                  : 'text-foreground hover:bg-muted'
-              }`}
-            >
-              {category.name}
-            </button>
-          ))}
-        </div>
-      </div>
 
-      {/* Faixa de preço */}
-      <div>
-        <h3 className="font-semibold text-foreground mb-3 text-sm uppercase tracking-wide">
-          Faixa de preço (R$)
+        <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
+          <button
+            type="button"
+            onClick={() => handleCategoryChange(undefined)}
+            aria-pressed={!currentFilters.categoryId}
+            className={`w-full rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+              !currentFilters.categoryId
+                ? 'bg-accent-soft font-semibold text-accent'
+                : 'text-foreground hover:bg-muted'
+            }`}
+          >
+            Todas as categorias
+          </button>
+
+          {categoriesLoading &&
+            [...Array(4)].map((_, index) => (
+              <div key={`category-skeleton-${index}`} className="h-9 animate-pulse rounded-lg bg-muted" />
+            ))}
+
+          {!categoriesLoading &&
+            categories.map((category) => {
+              const active = currentFilters.categoryId === category.id;
+
+              return (
+                <button
+                  key={category.id}
+                  type="button"
+                  onClick={() => handleCategoryChange(active ? undefined : category.id)}
+                  aria-pressed={active}
+                  className={`w-full rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                    active
+                      ? 'bg-accent-soft font-semibold text-accent'
+                      : 'text-foreground hover:bg-muted'
+                  }`}
+                >
+                  {category.name}
+                </button>
+              );
+            })}
+        </div>
+      </section>
+
+      <section className="border-t border-border pt-6">
+        <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          Faixa de preço
         </h3>
-        <div className="flex items-center gap-2">
-          <input
-            type="number"
-            min="0"
-            placeholder="Mín"
-            aria-label="Preço mínimo"
-            value={priceRange.min}
-            onChange={(e) => setPriceRange({ ...priceRange, min: e.target.value })}
-            className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-          />
-          <span className="text-muted-foreground">–</span>
-          <input
-            type="number"
-            min="0"
-            placeholder="Máx"
-            aria-label="Preço máximo"
-            value={priceRange.max}
-            onChange={(e) => setPriceRange({ ...priceRange, max: e.target.value })}
-            className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-          />
-        </div>
-        <Button onClick={handlePriceChange} variant="outline" size="sm" className="w-full mt-2">
-          Aplicar
-        </Button>
-      </div>
 
-      {/* Estoque */}
-      <div>
-        <label className="flex items-center gap-2 cursor-pointer text-sm text-foreground">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            handlePriceChange();
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <div className="relative min-w-0 flex-1">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground">
+                R$
+              </span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
+                placeholder="Mín"
+                aria-label="Preço mínimo"
+                value={priceRange.min}
+                onChange={(event) => setPriceRange({ ...priceRange, min: event.target.value })}
+                className="h-11 w-full rounded-xl border border-input bg-background pl-9 pr-2 text-sm text-foreground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              />
+            </div>
+            <span className="shrink-0 text-xs text-muted-foreground" aria-hidden="true">
+              até
+            </span>
+            <div className="relative min-w-0 flex-1">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground">
+                R$
+              </span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
+                placeholder="Máx"
+                aria-label="Preço máximo"
+                value={priceRange.max}
+                onChange={(event) => setPriceRange({ ...priceRange, max: event.target.value })}
+                className="h-11 w-full rounded-xl border border-input bg-background pl-9 pr-2 text-sm text-foreground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              />
+            </div>
+          </div>
+
+          <Button type="submit" variant="outline" size="sm" className="mt-3 w-full">
+            Aplicar faixa
+          </Button>
+        </form>
+      </section>
+
+      <section className="border-t border-border pt-6">
+        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border px-3.5 py-3 transition-colors hover:bg-muted/60">
           <input
             type="checkbox"
-            checked={currentFilters.inStock}
-            onChange={(e) => onFiltersChange({ ...currentFilters, inStock: e.target.checked })}
-            className="w-4 h-4 accent-[#C9A227] border-border rounded"
+            checked={Boolean(currentFilters.inStock)}
+            onChange={(event) =>
+              onFiltersChange({ ...currentFilters, inStock: event.target.checked })
+            }
+            className="mt-0.5 size-4 rounded border-input accent-[var(--accent)]"
           />
-          Apenas em estoque
+          <span>
+            <span className="block text-sm font-medium text-foreground">Apenas em estoque</span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              Mostrar somente produtos disponíveis para envio.
+            </span>
+          </span>
         </label>
-      </div>
+      </section>
 
-      {/* Limpar */}
       <Button onClick={clearFilters} variant="ghost" size="sm" className="w-full">
         Limpar filtros
       </Button>

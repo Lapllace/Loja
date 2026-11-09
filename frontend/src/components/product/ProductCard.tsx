@@ -18,7 +18,7 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
   const inStock = isInStock(product.stock);
   const { addItem, updating } = useCart();
   const [added, setAdded] = useState(false);
-  const isNew = product.featured;
+  const isFeatured = product.featured;
 
   const handleQuickAdd = async () => {
     if (!inStock || updating) return;
@@ -30,43 +30,55 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
   };
 
   return (
-    <article className="group flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card transition-all duration-200 hover:-translate-y-1 hover:shadow-lg">
+    <article className="group flex h-full flex-col overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-accent/30 hover:shadow-xl hover:shadow-ink/5">
       <Link
         href={`/loja/produtos/${product.slug}`}
-        className="block rounded-t-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="block rounded-t-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
       >
         {/* Imagem */}
-        <div className="relative aspect-square bg-muted">
+        <div className="relative aspect-square overflow-hidden bg-muted">
           <SafeImage
             src={mainImage?.url || null}
             alt={mainImage?.alt || product.name}
             fill
-            className="object-cover group-hover:scale-[1.03] transition-transform duration-300"
+            className="object-cover transition-transform duration-500 group-hover:scale-[1.04]"
             priority={priority}
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
           />
 
-          {isNew && inStock && (
-            <span className="absolute top-3 left-3 bg-accent text-primary-contrast text-[11px] font-semibold uppercase tracking-wide px-2 py-1 rounded">
-              Novo
-            </span>
-          )}
+          <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-3">
+            {isFeatured && inStock ? (
+              <span className="rounded-full bg-accent px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-white shadow-sm">
+                Destaque
+              </span>
+            ) : (
+              <span aria-hidden="true" />
+            )}
+
+            {!inStock && (
+              <span className="rounded-full bg-ink/85 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-white backdrop-blur-sm">
+                Esgotado
+              </span>
+            )}
+          </div>
 
           {!inStock && (
-            <div className="absolute inset-0 bg-black/55 flex items-center justify-center">
-              <span className="text-white font-semibold tracking-wide">Esgotado</span>
+            <div className="absolute inset-0 flex items-center justify-center bg-ink/25">
+              <span className="rounded-full bg-card/95 px-4 py-2 text-sm font-semibold text-foreground shadow-sm">
+                Produto esgotado
+              </span>
             </div>
           )}
         </div>
 
-        <div className="p-4 pb-3">
+        <div className="p-3 pb-2.5 sm:p-4 sm:pb-3">
           {product.category && (
-            <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-accent">
               {product.category.name}
             </p>
           )}
 
-          <h3 className="font-semibold text-foreground leading-snug line-clamp-2 group-hover:text-accent transition-colors">
+          <h3 className="mt-1.5 line-clamp-2 text-sm font-semibold leading-snug text-foreground transition-colors group-hover:text-accent sm:text-[15px]">
             {product.name}
           </h3>
 
@@ -74,21 +86,50 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
             <PriceFormatter price={product.price} comparePrice={product.comparePrice} />
           </div>
 
-          {!inStock && (
-            <p className="mt-2 text-sm text-error">Produto esgotado</p>
-          )}
+          <div className="mt-2.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span
+              className={`size-1.5 rounded-full ${inStock ? 'bg-success' : 'bg-error'}`}
+              aria-hidden="true"
+            />
+            {inStock ? 'Disponível para envio' : 'Sem estoque'}
+          </div>
         </div>
       </Link>
 
-      <div className="mt-auto flex items-center justify-between gap-3 border-t border-border px-4 py-3">
-        <span className="text-xs text-muted-foreground">{inStock ? 'Disponível' : 'Sem estoque'}</span>
+      <div className="mt-auto px-3 pb-3 sm:px-4 sm:pb-4">
         <button
           type="button"
           onClick={handleQuickAdd}
           disabled={!inStock || updating}
-          className="rounded-lg bg-ink px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-ink-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+          aria-label={
+            inStock
+              ? `Adicionar ${product.name} ao carrinho`
+              : `${product.name} está esgotado`
+          }
+          className={`inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-xl px-2 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 sm:h-10 sm:gap-2 sm:px-4 sm:text-xs ${
+            added
+              ? 'bg-success text-white'
+              : 'bg-ink text-white hover:bg-accent'
+          }`}
         >
-          {added ? 'Adicionado' : updating ? 'Adicionando...' : 'Adicionar'}
+          {added ? (
+            <>
+              <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.5 12.75l6 6 9-13.5" />
+              </svg>
+              Adicionado
+            </>
+          ) : (
+            <>
+              <svg className="hidden size-4 sm:block" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.014 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
+              </svg>
+              <span className="sm:hidden">{updating ? 'Adicionando' : 'Adicionar'}</span>
+              <span className="hidden sm:inline">
+                {updating ? 'Adicionando...' : 'Adicionar ao carrinho'}
+              </span>
+            </>
+          )}
         </button>
       </div>
     </article>

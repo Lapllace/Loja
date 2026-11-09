@@ -14,6 +14,9 @@ import {
   ImageSearchDialog,
   IMAGE_SEARCH_MAX_SELECTION,
 } from '@/components/admin/ImageSearchDialog';
+import { AdminPageHeader } from '@/components/admin/AdminPageHeader';
+import { AdminFormSection } from '@/components/admin/AdminFormSection';
+import { FeedbackBanner } from '@/components/admin/FeedbackBanner';
 
 const inputClassName =
   'w-full rounded-lg border-input bg-background px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors duration-200 outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40';
@@ -55,12 +58,15 @@ export default function NewProductPage() {
     name: '',
     sku: '',
     description: '',
+    shortDescription: '',
     price: '',
     comparePrice: '',
     costPrice: '',
     stock: '',
     categoryId: '',
     brandId: '',
+    active: true,
+    featured: false,
   });
   const [slug, setSlug] = useState('');
   const [slugTouched, setSlugTouched] = useState(false);
@@ -257,18 +263,26 @@ export default function NewProductPage() {
       return;
     }
 
+    const costPrice = form.costPrice.trim() === '' ? undefined : Number(form.costPrice);
+    if (costPrice !== undefined && (!Number.isFinite(costPrice) || costPrice < 0)) {
+      setError('Informe um custo válido (maior ou igual a zero) ou deixe o campo vazio.');
+      return;
+    }
+
     const payload: ProductFormPayload = {
       name: form.name.trim(),
       sku: form.sku.trim(),
       slug: slug.trim() || slugify(form.name),
       description: form.description.trim() || undefined,
+      shortDescription: form.shortDescription.trim() || undefined,
       price,
       comparePrice: form.comparePrice ? Number(form.comparePrice) : undefined,
-      costPrice: form.costPrice ? Number(form.costPrice) : undefined,
+      costPrice,
       stock: form.stock ? Number(form.stock) : 0,
       categoryId: form.categoryId,
       brandId: form.brandId.trim() || undefined,
-      active: true,
+      active: form.active,
+      featured: form.featured,
       // A imagem só vai como arquivo se foi escolhida no dispositivo;
       // quando veio por URL ela já está salva e o backend a resolve pelo campo.
       image: file,
@@ -374,241 +388,331 @@ export default function NewProductPage() {
   }
 
   return (
-    <main className="container-custom py-8 md:py-12">
-      <nav aria-label="Você está aqui" className="mb-4 text-sm text-muted-foreground">
-        <Link href="/admin/dashboard" className="hover:text-accent">
-          Painel Admin
-        </Link>
-        <span className="mx-2" aria-hidden="true">
-          /
-        </span>
-        <span className="font-medium text-foreground">Novo produto</span>
-      </nav>
-
-      <div className="mb-8">
-        <p className="text-sm font-semibold uppercase tracking-[0.16em] text-accent">
-          Painel administrativo
-        </p>
-        <h1 className="mt-2 text-3xl font-bold text-foreground">Cadastrar produto</h1>
-        <p className="mt-2 text-muted-foreground">
-          Preencha os dados e adicione a foto por câmera, arquivo, URL ou colando a imagem.
-        </p>
-      </div>
+    <div>
+      <AdminPageHeader
+        backHref="/admin/produtos"
+        backLabel="Voltar aos produtos"
+        eyebrow="Catálogo"
+        title="Cadastrar produto"
+        description="Preencha os dados do catálogo. A foto do produto continua sendo opcional apenas quando já existe uma imagem selecionada."
+      />
 
       {error && (
-        <div
-          role="alert"
-          className="mb-6 whitespace-pre-line rounded-xl border-error/30 bg-error/10 px-4 py-3 text-error"
-        >
+        <FeedbackBanner tone="error" className="mb-5" onDismiss={() => setError(null)}>
           {error}
-        </div>
+        </FeedbackBanner>
       )}
       {notice && (
-        <div
-          role="status"
-          className="mb-6 rounded-xl border-success/30 bg-success/10 px-4 py-3 text-success"
-        >
+        <FeedbackBanner tone="success" className="mb-5" onDismiss={() => setNotice(null)}>
           {notice}
-        </div>
+        </FeedbackBanner>
       )}
 
       <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
-        {/* ---------------- Dados do produto ---------------- */}
-        <section className="rounded-2xl border-border bg-background p-6">
-          <h2 className="text-xl font-bold text-foreground">Dados do produto</h2>
+        <div className="space-y-6">
+          {/* 1. Informações básicas */}
+          <AdminFormSection
+            step={1}
+            title="Informações básicas"
+            description="Identificação do produto no catálogo e na URL pública."
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <label htmlFor="product-name" className={labelClassName}>
+                  Nome *
+                </label>
+                <input
+                  id="product-name"
+                  name="name"
+                  required
+                  value={form.name}
+                  onChange={(e) => handleChange('name', e.target.value)}
+                  className={inputClassName}
+                  placeholder="Camiseta Básica Algodão"
+                />
+              </div>
 
-          <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            <div className="sm:col-span-2">
-              <label htmlFor="product-name" className={labelClassName}>
-                Nome *
-              </label>
-              <input
-                id="product-name"
-                name="name"
-                required
-                value={form.name}
-                onChange={(e) => handleChange('name', e.target.value)}
-                className={inputClassName}
-                placeholder="Camiseta Básica Algodão"
-              />
+              <div>
+                <label htmlFor="product-sku" className={labelClassName}>
+                  SKU *
+                </label>
+                <input
+                  id="product-sku"
+                  name="sku"
+                  required
+                  value={form.sku}
+                  onChange={(e) => handleChange('sku', e.target.value)}
+                  className={inputClassName}
+                  placeholder="CAM-001"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">Código único do produto.</p>
+              </div>
+
+              <div>
+                <label htmlFor="product-slug" className={labelClassName}>
+                  Slug *
+                </label>
+                <input
+                  id="product-slug"
+                  name="slug"
+                  required
+                  value={slug}
+                  onChange={(e) => {
+                    setSlugTouched(true);
+                    setSlug(e.target.value);
+                  }}
+                  className={inputClassName}
+                  placeholder="camiseta-basica-algodao"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">Endereço do produto na loja.</p>
+              </div>
             </div>
+          </AdminFormSection>
 
-            <div>
-              <label htmlFor="product-sku" className={labelClassName}>
-                SKU *
-              </label>
-              <input
-                id="product-sku"
-                name="sku"
-                required
-                value={form.sku}
-                onChange={(e) => handleChange('sku', e.target.value)}
-                className={inputClassName}
-                placeholder="CAM-001"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="product-slug" className={labelClassName}>
-                Slug *
-              </label>
-              <input
-                id="product-slug"
-                name="slug"
-                required
-                value={slug}
-                onChange={(e) => {
-                  setSlugTouched(true);
-                  setSlug(e.target.value);
-                }}
-                className={inputClassName}
-                placeholder="camiseta-basica-algodao"
-              />
-            </div>
-
-            <div className="sm:col-span-2">
-              <label htmlFor="product-description" className={labelClassName}>
-                Descrição
-              </label>
-              <textarea
-                id="product-description"
-                name="description"
-                rows={4}
-                value={form.description}
-                onChange={(e) => handleChange('description', e.target.value)}
-                className={inputClassName}
-                placeholder="Detalhes, material, medidas..."
-              />
-            </div>
-
-            <div>
-              <label htmlFor="product-price" className={labelClassName}>
-                Preço (R$) *
-              </label>
-              <input
-                id="product-price"
-                name="price"
-                type="number"
-                min="0"
-                step="0.01"
-                required
-                value={form.price}
-                onChange={(e) => handleChange('price', e.target.value)}
-                className={inputClassName}
-                placeholder="89.90"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="product-compare-price" className={labelClassName}>
-                Preço comparativo (R$)
-              </label>
-              <input
-                id="product-compare-price"
-                name="comparePrice"
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.comparePrice}
-                onChange={(e) => handleChange('comparePrice', e.target.value)}
-                className={inputClassName}
-                placeholder="119.90"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="product-cost-price" className={labelClassName}>
-                Custo (R$)
-              </label>
-              <input
-                id="product-cost-price"
-                name="costPrice"
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.costPrice}
-                onChange={(e) => handleChange('costPrice', e.target.value)}
-                className={inputClassName}
-                placeholder="45.00"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="product-stock" className={labelClassName}>
-                Estoque *
-              </label>
-              <input
-                id="product-stock"
-                name="stock"
-                type="number"
-                min="0"
-                step="1"
-                required
-                value={form.stock}
-                onChange={(e) => handleChange('stock', e.target.value)}
-                className={inputClassName}
-                placeholder="10"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="product-category" className={labelClassName}>
-                Categoria *
-              </label>
-              <select
-                id="product-category"
-                name="categoryId"
-                required
-                value={form.categoryId}
-                onChange={(e) => handleChange('categoryId', e.target.value)}
-                className={inputClassName}
-                disabled={loadingCategories}
-              >
-                <option value="">
-                  {loadingCategories ? 'Carregando...' : 'Selecione uma categoria'}
-                </option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
+          {/* 2. Classificação */}
+          <AdminFormSection
+            step={2}
+            title="Classificação"
+            description="Categoria e marca usadas para organizar e filtrar o catálogo."
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor="product-category" className={labelClassName}>
+                  Categoria *
+                </label>
+                <select
+                  id="product-category"
+                  name="categoryId"
+                  required
+                  value={form.categoryId}
+                  onChange={(e) => handleChange('categoryId', e.target.value)}
+                  className={inputClassName}
+                  disabled={loadingCategories}
+                >
+                  <option value="">
+                    {loadingCategories ? 'Carregando...' : 'Selecione uma categoria'}
                   </option>
-                ))}
-              </select>
-            </div>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <div>
-              <label htmlFor="product-brand" className={labelClassName}>
-                Marca
-              </label>
-              {/*
-                Antes era um campo de texto livre rotulado "Marca (ID)". O valor
-                digitado (ex.: "Lattafa") era enviado como `brandId` e o backend
-                respondia 400 "Brand not found" — que a UI traduzia como
-                "Dados inválidos". Agora é um seletor das marcas existentes, então
-                só IDs reais podem ser enviados.
-              */}
-              <select
-                id="product-brand"
-                name="brandId"
-                value={form.brandId}
-                onChange={(e) => handleChange('brandId', e.target.value)}
-                className={inputClassName}
-                disabled={loadingBrands}
-              >
-                <option value="">
-                  {loadingBrands ? 'Carregando...' : 'Sem marca'}
-                </option>
-                {brands.map((brand) => (
-                  <option key={brand.id} value={brand.id}>
-                    {brand.name}
+              <div>
+                <label htmlFor="product-brand" className={labelClassName}>
+                  Marca
+                </label>
+                {/*
+                  Antes era um campo de texto livre rotulado "Marca (ID)". O valor
+                  digitado (ex.: "Lattafa") era enviado como `brandId` e o backend
+                  respondia 400 "Brand not found" — que a UI traduzia como
+                  "Dados inválidos". Agora é um seletor das marcas existentes, então
+                  só IDs reais podem ser enviados.
+                */}
+                <select
+                  id="product-brand"
+                  name="brandId"
+                  value={form.brandId}
+                  onChange={(e) => handleChange('brandId', e.target.value)}
+                  className={inputClassName}
+                  disabled={loadingBrands}
+                >
+                  <option value="">
+                    {loadingBrands ? 'Carregando...' : 'Sem marca'}
                   </option>
-                ))}
-              </select>
+                  {brands.map((brand) => (
+                    <option key={brand.id} value={brand.id}>
+                      {brand.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Só é possível escolher marcas já cadastradas.
+                </p>
+              </div>
             </div>
-          </div>
-        </section>
+          </AdminFormSection>
+
+          {/* 3. Preço e custos */}
+          <AdminFormSection
+            step={3}
+            title="Preço e custos"
+            description="Valores praticados na loja e custo administrativo do produto."
+          >
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div>
+                <label htmlFor="product-price" className={labelClassName}>
+                  Preço (R$) *
+                </label>
+                <input
+                  id="product-price"
+                  name="price"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  required
+                  value={form.price}
+                  onChange={(e) => handleChange('price', e.target.value)}
+                  className={inputClassName}
+                  placeholder="89.90"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="product-compare-price" className={labelClassName}>
+                  Preço comparativo (R$)
+                </label>
+                <input
+                  id="product-compare-price"
+                  name="comparePrice"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.comparePrice}
+                  onChange={(e) => handleChange('comparePrice', e.target.value)}
+                  className={inputClassName}
+                  placeholder="119.90"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">Opcional. Exibido riscado.</p>
+              </div>
+
+              <div>
+                <label htmlFor="product-cost-price" className={labelClassName}>
+                  Custo (R$)
+                </label>
+                <input
+                  id="product-cost-price"
+                  name="costPrice"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.costPrice}
+                  onChange={(e) => handleChange('costPrice', e.target.value)}
+                  className={inputClassName}
+                  placeholder="45.00"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Opcional. Uso administrativo — não aparece na loja.
+                </p>
+              </div>
+            </div>
+          </AdminFormSection>
+
+          {/* 4. Estoque */}
+          <AdminFormSection
+            step={4}
+            title="Estoque"
+            description="Quantidade disponível para venda."
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor="product-stock" className={labelClassName}>
+                  Estoque *
+                </label>
+                <input
+                  id="product-stock"
+                  name="stock"
+                  type="number"
+                  min="0"
+                  step="1"
+                  required
+                  value={form.stock}
+                  onChange={(e) => handleChange('stock', e.target.value)}
+                  className={inputClassName}
+                  placeholder="10"
+                />
+              </div>
+              <div className="rounded-xl border border-border bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground sm:self-end">
+                Alterações posteriores de estoque são registradas pelo backend como movimentação
+                do tipo <span className="font-semibold text-foreground">ADJUSTMENT</span>. Não há
+                regra de estoque baixo cadastrada; apenas estoque zerado é destacado na listagem.
+              </div>
+            </div>
+          </AdminFormSection>
+
+          {/* 5. Descrição */}
+          <AdminFormSection
+            step={5}
+            title="Descrição"
+            description="Texto exibido na página do produto."
+          >
+            <div className="grid gap-4">
+              <div>
+                <label htmlFor="product-short-description" className={labelClassName}>
+                  Descrição curta
+                </label>
+                <input
+                  id="product-short-description"
+                  name="shortDescription"
+                  value={form.shortDescription}
+                  onChange={(e) => handleChange('shortDescription', e.target.value)}
+                  className={inputClassName}
+                  placeholder="Resumo em uma linha para cards e listagens"
+                />
+              </div>
+              <div>
+                <label htmlFor="product-description" className={labelClassName}>
+                  Descrição completa
+                </label>
+                <textarea
+                  id="product-description"
+                  name="description"
+                  rows={5}
+                  value={form.description}
+                  onChange={(e) => handleChange('description', e.target.value)}
+                  className={inputClassName}
+                  placeholder="Detalhes, material, medidas..."
+                />
+              </div>
+            </div>
+          </AdminFormSection>
+        </div>
+
+        <div className="space-y-6">
+          {/* 6. Situação do produto */}
+          <AdminFormSection
+            step={6}
+            title="Situação do produto"
+            description="Controle a publicação na loja e o destaque no catálogo."
+          >
+            <div className="space-y-3">
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-background p-3">
+                <input
+                  type="checkbox"
+                  checked={form.active}
+                  onChange={(e) => setForm((prev) => ({ ...prev, active: e.target.checked }))}
+                  className="mt-0.5 rounded border-input"
+                />
+                <span>
+                  <span className="block text-sm font-semibold text-foreground">Produto ativo</span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    Quando desmarcado, o produto não aparece na loja.
+                  </span>
+                </span>
+              </label>
+
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-background p-3">
+                <input
+                  type="checkbox"
+                  checked={form.featured}
+                  onChange={(e) => setForm((prev) => ({ ...prev, featured: e.target.checked }))}
+                  className="mt-0.5 rounded border-input"
+                />
+                <span>
+                  <span className="block text-sm font-semibold text-foreground">Destaque</span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    Marca o produto para vitrines de destaque.
+                  </span>
+                </span>
+              </label>
+            </div>
+          </AdminFormSection>
+
 
         {/* ---------------- Foto do produto ---------------- */}
-        <section className="rounded-2xl border-border bg-background p-6">
+        <section className="rounded-2xl border border-border bg-card p-5 shadow-sm md:p-6">
           <h2 className="text-xl font-bold text-foreground">Foto do produto</h2>
 
           {/* Preview */}
@@ -785,20 +889,24 @@ export default function NewProductPage() {
             </div>
           )}
         </section>
+        </div>
 
         <div className="lg:col-span-2">
-          <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => router.push('/admin/dashboard')}
-              disabled={saving}
-            >
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={saving}>
-              {saving ? 'Salvando...' : 'Salvar produto'}
-            </Button>
+          <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-muted-foreground">Campos marcados com * são obrigatórios.</p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => router.push('/admin/produtos')}
+                disabled={saving}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={saving}>
+                {saving ? 'Salvando...' : 'Salvar produto'}
+              </Button>
+            </div>
           </div>
         </div>
       </form>
@@ -821,6 +929,6 @@ export default function NewProductPage() {
           setError(null);
         }}
       />
-    </main>
+    </div>
   );
 }

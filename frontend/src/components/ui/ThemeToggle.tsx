@@ -32,15 +32,35 @@ export function ThemeToggle() {
     window.dispatchEvent(new Event('themechange'));
   };
 
+  const isDark = theme === 'dark';
+
   return (
     <button
       type="button"
       onClick={toggleTheme}
-      className="inline-flex items-center justify-center rounded-lg border border-white/15 p-2 text-white/80 transition-colors hover:border-accent/60 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-      title={theme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'}
-      aria-label={theme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'}
+      className="inline-flex size-10 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:border-accent/40 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+      title={isDark ? 'Ativar modo claro' : 'Ativar modo escuro'}
+      aria-label={isDark ? 'Ativar modo claro' : 'Ativar modo escuro'}
     >
-      {theme === 'dark' ? '☀' : '☾'}
+      {isDark ? (
+        <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={1.7}
+            d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z"
+          />
+        </svg>
+      ) : (
+        <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={1.7}
+            d="M21.752 15.002A9.72 9.72 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z"
+          />
+        </svg>
+      )}
     </button>
   );
 }

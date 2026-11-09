@@ -12,6 +12,7 @@ export function useProducts(filters?: ProductFilters, sort?: ProductSort) {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   // Serializa filtros para estável (evita refetch em cada render)
   const filterKey = JSON.stringify(filters ?? {});
@@ -26,7 +27,10 @@ export function useProducts(filters?: ProductFilters, sort?: ProductSort) {
         if (!cancelled) setError(null);
         const parsedFilters = JSON.parse(filterKey) as ProductFilters;
         const parsedSort = JSON.parse(sortKey) as ProductSort;
-        const data = await api.getProducts(parsedFilters, parsedSort, { next: { revalidate: 0 } });
+        const data = await api.getProducts(parsedFilters, parsedSort, {
+          next: { revalidate: 0 },
+          throwOnError: true,
+        });
         if (!cancelled) setProducts(data);
       } catch {
         if (!cancelled) {
@@ -43,9 +47,11 @@ export function useProducts(filters?: ProductFilters, sort?: ProductSort) {
     return () => {
       cancelled = true;
     };
-  }, [filterKey, sortKey]);
+  }, [filterKey, sortKey, reloadKey]);
 
-  return { products, loading, error };
+  const reload = () => setReloadKey((key) => key + 1);
+
+  return { products, loading, error, reload };
 }
 
 /**

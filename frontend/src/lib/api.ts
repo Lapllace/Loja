@@ -99,6 +99,12 @@ interface RequestOptions {
   // FormData é usado no upload multipart: nunca definir Content-Type manualmente,
   // o browser precisa gerar o boundary automaticamente.
   body?: string | FormData;
+  /**
+   * Faz `getProducts` lançar `ApiUnavailableError` em falhas de rede/servidor
+   * (exceto 404). Usado pelo catálogo client-side para distinguir erro de
+   * ausência de resultados. O padrão continua retornando `[]`.
+   */
+  throwOnError?: boolean;
 }
 
 export type ApiResult<T> =
@@ -261,6 +267,7 @@ class ApiClient {
     const qs = params.toString();
     const result = await this.request<Product[]>(`/products${qs ? `?${qs}` : ''}`, opts);
     if (result.ok) return result.data;
+    if (opts.throwOnError && result.status !== 404) throw new ApiUnavailableError();
     if (!result.ok && result.status !== 404) {
       console.warn(`[api] getProducts failed: HTTP ${result.status} — /products${qs ? `?${qs}` : ''}`);
     }

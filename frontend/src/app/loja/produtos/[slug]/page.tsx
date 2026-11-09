@@ -6,6 +6,7 @@ import { ProductGallery } from '@/components/product/ProductGallery';
 import { ProductActions } from '@/components/product/ProductActions';
 import { PriceFormatter } from '@/components/ui/PriceFormatter';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { formatPrice, isInStock } from '@/lib/utils';
 
 // Página de produto (Server Component) - revalida a cada 60s
@@ -55,19 +56,25 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function ProductPage({ params }: PageProps) {
   const { slug } = await params;
   const product = await getProduct(slug);
+
   if (product === 'unavailable') {
     return (
-      <div className="py-12">
+      <div className="pb-16 pt-6 md:pt-8">
         <div className="container-custom">
-          <EmptyState
-            title="Não foi possível carregar o produto"
-            description="A API não está disponível no momento. Tente novamente em alguns instantes."
-            action={
-              <Link href="/loja/produtos" className="text-accent hover:underline text-sm font-medium">
-                Ver todos os produtos
-              </Link>
-            }
-          />
+          <div className="rounded-2xl border border-border bg-card">
+            <EmptyState
+              title="Não foi possível carregar o produto"
+              description="A API não está disponível no momento. Tente novamente em alguns instantes."
+              action={
+                <Link
+                  href="/loja/produtos"
+                  className="text-sm font-semibold text-accent transition-colors hover:text-accent-dark hover:underline"
+                >
+                  Ver todos os produtos
+                </Link>
+              }
+            />
+          </div>
         </div>
       </div>
     );
@@ -80,104 +87,169 @@ export default async function ProductPage({ params }: PageProps) {
   const inStock = isInStock(product.stock);
 
   return (
-    <div className="py-8 md:py-10">
+    <div className="pb-16 pt-6 md:pt-8">
       <div className="container-custom">
-        {/* Breadcrumb */}
-        <nav aria-label="Navegação estrutural" className="mb-6 text-sm text-muted-foreground">
-          <ol className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <li>
-              <Link href="/loja" className="hover:text-accent">Início</Link>
-            </li>
-            <li aria-hidden="true">/</li>
-            <li>
-              <Link href="/loja/produtos" className="hover:text-accent">Produtos</Link>
-            </li>
-            {product.category && (
-              <>
-                <li aria-hidden="true">/</li>
-                <li>
+        <Breadcrumbs
+          className="mb-6"
+          items={[
+            { label: 'Início', href: '/loja' },
+            { label: 'Produtos', href: '/loja/produtos' },
+            ...(product.category
+              ? [
+                  {
+                    label: product.category.name,
+                    href: `/loja/categorias/${product.category.slug}`,
+                  },
+                ]
+              : []),
+            { label: product.name },
+          ]}
+        />
+
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:gap-12 xl:gap-16">
+          {/* Galeria */}
+          <div className="lg:sticky lg:top-32 lg:self-start">
+            <ProductGallery images={product.images ?? []} productName={product.name} />
+          </div>
+
+          {/* Informações */}
+          <div className="min-w-0">
+            <header>
+              <div className="flex flex-wrap items-center gap-2">
+                {product.category && (
                   <Link
                     href={`/loja/categorias/${product.category.slug}`}
-                    className="hover:text-accent"
+                    className="inline-flex items-center rounded-full bg-accent-soft px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-accent transition-colors hover:bg-accent/15"
                   >
                     {product.category.name}
                   </Link>
-                </li>
-              </>
-            )}
-            <li aria-hidden="true">/</li>
-            <li aria-current="page" className="text-foreground font-medium">
-              {product.name}
-            </li>
-          </ol>
-        </nav>
+                )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-14">
-          {/* Galeria */}
-          <ProductGallery images={product.images ?? []} productName={product.name} />
+                {product.brand && (
+                  <span className="inline-flex items-center rounded-full border border-border bg-card px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    {product.brand.name}
+                  </span>
+                )}
+              </div>
 
-          {/* Informações */}
-          <div className="space-y-5">
-            {product.category && (
-              <p className="text-xs font-semibold uppercase tracking-[0.15em] text-accent">
-                {product.category.name}
+              <h1 className="mt-4 text-3xl font-bold leading-tight text-foreground md:text-4xl">
+                {product.name}
+              </h1>
+
+              <div className="mt-4 flex flex-wrap items-center gap-2.5 text-xs">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-muted-foreground">
+                  SKU
+                  <span className="font-semibold text-foreground">{product.sku}</span>
+                </span>
+
+                <span
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-semibold ${
+                    inStock
+                      ? 'bg-success/10 text-success'
+                      : 'bg-error/10 text-error'
+                  }`}
+                >
+                  <span
+                    className={`size-1.5 rounded-full ${inStock ? 'bg-success' : 'bg-error'}`}
+                    aria-hidden="true"
+                  />
+                  {inStock ? 'Em estoque' : 'Produto esgotado'}
+                </span>
+              </div>
+            </header>
+
+            <div className="mt-6 rounded-2xl border border-border bg-card p-5 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Preço
               </p>
-            )}
-
-            <h1 className="text-3xl font-bold text-foreground leading-tight text-balance">
-              {product.name}
-            </h1>
-
-            <PriceFormatter
-              price={product.price}
-              comparePrice={product.comparePrice}
-              className="text-2xl"
-            />
-
-            {/* Disponibilidade */}
-            <div className="flex items-center gap-2">
-              <span
-                className={`inline-block w-2.5 h-2.5 rounded-full ${inStock ? 'bg-success' : 'bg-error'}`}
-                aria-hidden="true"
+              <PriceFormatter
+                price={product.price}
+                comparePrice={product.comparePrice}
+                size="xl"
+                className="mt-1"
               />
-              <span className={`text-sm font-medium ${inStock ? 'text-success' : 'text-error'}`}>
-                {inStock ? 'Em estoque' : 'Produto esgotado'}
-              </span>
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                Formas de pagamento e frete são exibidos no checkout.
+              </p>
             </div>
 
             {product.shortDescription && (
-              <p className="leading-relaxed text-muted-foreground">{product.shortDescription}</p>
+              <p className="mt-5 text-sm leading-relaxed text-muted-foreground md:text-[15px]">
+                {product.shortDescription}
+              </p>
             )}
 
-            <div className="divide-y divide-border rounded-xl border border-input">
-              <details open className="group/details p-4">
-                <summary className="cursor-pointer list-none font-semibold text-foreground marker:hidden">
-                  <span className="flex items-center justify-between gap-4">
-                    Descrição
-                    <span className="text-accent transition-transform group-open/details:rotate-45" aria-hidden="true">+</span>
+            {/* Ações (client) */}
+            <ProductActions productId={product.id} stock={product.stock} />
+
+            {/* Descrição e especificações */}
+            <div className="mt-7 divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
+              <details open className="group/details">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 font-semibold text-foreground marker:hidden">
+                  Descrição
+                  <span
+                    className="text-lg leading-none text-accent transition-transform group-open/details:rotate-45"
+                    aria-hidden="true"
+                  >
+                    +
                   </span>
                 </summary>
-                <p className="mt-3 whitespace-pre-line leading-relaxed text-muted-foreground">
-                  {product.description || 'Detalhes do produto disponíveis em breve.'}
-                </p>
+                <div className="px-5 pb-5">
+                  <p className="whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
+                    {product.description || 'Detalhes do produto disponíveis em breve.'}
+                  </p>
+                </div>
               </details>
-              <details className="group/details p-4">
-                <summary className="cursor-pointer list-none font-semibold text-foreground marker:hidden">
-                  <span className="flex items-center justify-between gap-4">
-                    Especificações
-                    <span className="text-accent transition-transform group-open/details:rotate-45" aria-hidden="true">+</span>
+
+              <details className="group/details">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 font-semibold text-foreground marker:hidden">
+                  Especificações
+                  <span
+                    className="text-lg leading-none text-accent transition-transform group-open/details:rotate-45"
+                    aria-hidden="true"
+                  >
+                    +
                   </span>
                 </summary>
-                <dl className="mt-3 space-y-2 text-sm">
-                  <div className="flex justify-between gap-4"><dt className="text-muted-foreground">SKU</dt><dd className="font-medium text-foreground">{product.sku}</dd></div>
-                  {product.category && <div className="flex justify-between gap-4"><dt className="text-muted-foreground">Categoria</dt><dd className="font-medium text-foreground">{product.category.name}</dd></div>}
-                  {product.brand && <div className="flex justify-between gap-4"><dt className="text-muted-foreground">Marca</dt><dd className="font-medium text-foreground">{product.brand.name}</dd></div>}
+                <dl className="space-y-2.5 px-5 pb-5 text-sm">
+                  <div className="flex items-baseline justify-between gap-4">
+                    <dt className="text-muted-foreground">SKU</dt>
+                    <dd className="text-right font-medium text-foreground">{product.sku}</dd>
+                  </div>
+                  {product.category && (
+                    <div className="flex items-baseline justify-between gap-4">
+                      <dt className="text-muted-foreground">Categoria</dt>
+                      <dd className="text-right font-medium text-foreground">
+                        {product.category.name}
+                      </dd>
+                    </div>
+                  )}
+                  {product.brand && (
+                    <div className="flex items-baseline justify-between gap-4">
+                      <dt className="text-muted-foreground">Marca</dt>
+                      <dd className="text-right font-medium text-foreground">
+                        {product.brand.name}
+                      </dd>
+                    </div>
+                  )}
                 </dl>
               </details>
             </div>
 
-            {/* Ações (client) */}
-            <ProductActions productId={product.id} stock={product.stock} />
+            <ul className="mt-6 grid gap-3 sm:grid-cols-2">
+              <li className="flex items-start gap-3 rounded-xl bg-muted/60 p-4 text-xs leading-relaxed text-muted-foreground">
+                <svg className="mt-0.5 size-4 shrink-0 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12" />
+                </svg>
+                Enviamos para todo o Brasil.
+              </li>
+              <li className="flex items-start gap-3 rounded-xl bg-muted/60 p-4 text-xs leading-relaxed text-muted-foreground">
+                <svg className="mt-0.5 size-4 shrink-0 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Estoque verificado em tempo real.
+              </li>
+            </ul>
           </div>
         </div>
       </div>

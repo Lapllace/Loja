@@ -29,12 +29,12 @@ export function Button({
     "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-5";
 
   const variantStyles = {
-    // Ação principal: dourado da marca com leve escurecimento no hover.
-    primary: 'bg-accent text-ink hover:bg-accent-dark shadow-sm shadow-accent/20',
-    // Ação secundária: preto sólido.
+    // Ação principal: azul elétrico com texto branco.
+    primary: 'bg-accent text-white hover:bg-accent-dark shadow-sm shadow-accent/20',
+    // Ação secundária: azul profundo sólido.
     secondary: 'bg-ink text-white hover:bg-ink-dark shadow-sm',
     // Contorno: fundo claro, borda neutra e hover para superfície suave.
-    outline: 'border border-input bg-background text-foreground hover:bg-muted hover:border-foreground/30',
+    outline: 'border border-input bg-background text-foreground hover:bg-muted hover:border-accent/40',
     // Fantasma: sem fundo até o hover.
     ghost: 'text-foreground hover:bg-muted',
   };

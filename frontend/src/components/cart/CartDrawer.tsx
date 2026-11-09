@@ -111,6 +111,7 @@ export function CartDrawer() {
     <div
       className={`fixed inset-0 z-[100] ${isOpen ? '' : 'pointer-events-none'}`}
       aria-hidden={!isOpen}
+      inert={!isOpen}
     >
       {/* Overlay */}
       <div
@@ -180,7 +181,7 @@ export function CartDrawer() {
                 <button
                   type="button"
                   onClick={() => void refresh()}
-                  className="mt-2 inline-flex items-center px-5 py-2.5 rounded-lg bg-accent text-ink font-semibold hover:bg-accent-dark transition-colors"
+                  className="mt-2 inline-flex items-center rounded-xl bg-accent px-5 py-2.5 font-semibold text-white transition-colors hover:bg-accent-dark"
                 >
                   Tentar novamente
                 </button>
@@ -197,7 +198,7 @@ export function CartDrawer() {
                 <Link
                   href="/loja/produtos"
                   onClick={closeCart}
-                  className="mt-2 inline-flex items-center px-5 py-2.5 rounded-lg bg-accent text-ink font-semibold hover:bg-accent-dark transition-colors"
+                  className="mt-2 inline-flex items-center rounded-xl bg-accent px-5 py-2.5 font-semibold text-white transition-colors hover:bg-accent-dark"
                 >
                   Explorar produtos
                 </Link>
@@ -212,6 +213,7 @@ export function CartDrawer() {
                   updating={updating}
                   onChange={(quantity) => handleUpdate(item, quantity)}
                   onRemove={() => handleRemove(item)}
+                  compact
                 />
               ))}
             </ul>
